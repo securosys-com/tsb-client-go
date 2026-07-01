@@ -145,13 +145,13 @@ Load the environment and run tests:
 set -a
 source .env
 set +a
-go test ./...
+go test -v ./...
 ```
 
 Run a single test:
 
 ```sh
-go test ./... -run TestCreateSignVerifyAllAlgorithmsAndDeleteKeyWithTSB
+go test -v ./... -run TestCreateSignVerifyAllAlgorithmsAndDeleteKeyWithTSB
 ```
 
 Authentication selection in tests:

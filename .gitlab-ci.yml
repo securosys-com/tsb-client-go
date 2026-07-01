@@ -12,7 +12,7 @@ test:
   tags:
     - Go
   script:
-    - go test ./...
+    - go test -v ./...
 
 mirror:
   rules:
