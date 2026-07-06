@@ -40,7 +40,20 @@ func main() {
 }
 ```
 
-Use `NewClient` when you already have a `helpers.SecurosysConfig`.
+Use `NewClient` when you already have a `helpers.SecurosysConfig`. Serialized configuration parameters use snake_case:
+
+```json
+{
+  "auth": "TOKEN",
+  "bearer_token": "bearer-token",
+  "cert_path": "/path/to/client.crt",
+  "key_path": "/path/to/client.key",
+  "rest_api": "https://tsb.example.com",
+  "app_name": "my-application",
+  "application_key_pair": "{\"private_key\":\"...\",\"public_key\":\"...\"}",
+  "api_keys": "{\"key_management_token\":[\"key-management-api-key\"],\"key_operation_token\":[\"key-operation-api-key\"],\"service_token\":[\"service-api-key\"]}"
+}
+```
 
 ## Authorization
 
