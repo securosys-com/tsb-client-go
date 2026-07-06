@@ -1,5 +1,6 @@
-// Copyright (c) 2025 Securosys SA.
-// SPDX-License-Identifier: MPL-2.0
+// SPDX-FileCopyrightText: Copyright 2026 Securosys SA
+// SPDX-License-Identifier: Apache-2.0
+
 package client
 
 import (

@@ -541,3 +541,7 @@ RSA wrap methods:
 ## Acknowledgements
 
 This README was created with help from ChatGPT Codex.
+
+## License
+
+This project is licensed under the [Apache 2.0](./LICENSE) license.
