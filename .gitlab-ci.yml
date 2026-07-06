@@ -5,8 +5,16 @@ default:
     - Go
 
 stages:
+  - lint
   - test
   - mirror
+
+# https://go.dev/doc/tutorial/govulncheck
+govulncheck:
+  stage: lint
+  script:
+    - go install golang.org/x/vuln/cmd/govulncheck@latest
+    - govulncheck ./...
 
 test:
   stage: test
