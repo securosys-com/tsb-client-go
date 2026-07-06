@@ -24,15 +24,15 @@ func NewClient(config *helpers.SecurosysConfig) (*SecurosysClient, error) {
 	var mappedConfig map[string]string
 	json.Unmarshal(bytes, &mappedConfig)
 	var keyPair KeyPair
-	json.Unmarshal([]byte(mappedConfig["applicationKeyPair"]), &keyPair)
+	json.Unmarshal([]byte(mappedConfig["application_key_pair"]), &keyPair)
 
 	var apiKeys ApiKeyTypes
-	json.Unmarshal([]byte(mappedConfig["apiKeys"]), &apiKeys)
-	c, err := NewTSBClient(mappedConfig["restapi"], AuthStruct{
+	json.Unmarshal([]byte(mappedConfig["api_keys"]), &apiKeys)
+	c, err := NewTSBClient(mappedConfig["rest_api"], AuthStruct{
 		AuthType:           mappedConfig["auth"],
-		CertPath:           mappedConfig["certpath"],
-		KeyPath:            mappedConfig["keypath"],
-		BearerToken:        mappedConfig["bearertoken"],
+		CertPath:           mappedConfig["cert_path"],
+		KeyPath:            mappedConfig["key_path"],
+		BearerToken:        mappedConfig["bearer_token"],
 		ApplicationKeyPair: keyPair,
 		ApiKeys:            apiKeys,
 		AppName:            "OpenBao - Securosys HSM KMS",

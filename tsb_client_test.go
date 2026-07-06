@@ -5,10 +5,13 @@ package client
 
 import (
 	"context"
+	"encoding/json"
 	"os"
 	"strconv"
 	"strings"
 	"testing"
+
+	helpers "github.com/securosys-com/tsb-client-go/helpers"
 )
 
 const (
@@ -41,6 +44,66 @@ func TestNewTSBClientTrimsTrailingSlash(t *testing.T) {
 
 	if tsbClient.HostURL != "https://tsb.example.test" {
 		t.Fatalf("HostURL = %q, want trailing slash trimmed", tsbClient.HostURL)
+	}
+}
+
+func TestNewClientUsesSnakeCaseConfigParameters(t *testing.T) {
+	privateKey := "private"
+	publicKey := "public"
+	config := &helpers.SecurosysConfig{
+		Auth:               authTypeToken,
+		BearerToken:        "bearer-token",
+		CertPath:           "/tmp/client.crt",
+		KeyPath:            "/tmp/client.key",
+		RestApi:            testTSBURL,
+		AppName:            testAppName,
+		ApplicationKeyPair: `{"private_key":"` + privateKey + `","public_key":"` + publicKey + `"}`,
+		ApiKeys:            `{"key_management_token":["management"],"key_operation_token":["operation"],"service_token":["service"]}`,
+	}
+
+	bytes, err := json.Marshal(config)
+	requireNoError(t, err)
+	jsonConfig := string(bytes)
+	for _, parameter := range []string{"bearer_token", "cert_path", "key_path", "rest_api", "app_name", "application_key_pair", "api_keys"} {
+		if !strings.Contains(jsonConfig, `"`+parameter+`"`) {
+			t.Fatalf("marshaled config missing snake_case parameter %q in %s", parameter, jsonConfig)
+		}
+	}
+	for _, parameter := range []string{"bearertoken", "certpath", "keypath", "restapi", "appName", "applicationKeyPair", "apiKeys"} {
+		if strings.Contains(jsonConfig, `"`+parameter+`"`) {
+			t.Fatalf("marshaled config contains non-snake-case parameter %q in %s", parameter, jsonConfig)
+		}
+	}
+
+	securosysClient, err := NewClient(config)
+	requireNoError(t, err)
+
+	if securosysClient.HostURL != "https://tsb.example.test" {
+		t.Fatalf("HostURL = %q, want trailing slash trimmed", securosysClient.HostURL)
+	}
+	if securosysClient.Auth.BearerToken != "bearer-token" {
+		t.Fatalf("BearerToken = %q, want bearer-token", securosysClient.Auth.BearerToken)
+	}
+	if securosysClient.Auth.CertPath != "/tmp/client.crt" {
+		t.Fatalf("CertPath = %q, want /tmp/client.crt", securosysClient.Auth.CertPath)
+	}
+	if securosysClient.Auth.KeyPath != "/tmp/client.key" {
+		t.Fatalf("KeyPath = %q, want /tmp/client.key", securosysClient.Auth.KeyPath)
+	}
+	if securosysClient.Auth.ApplicationKeyPair.PrivateKey == nil || *securosysClient.Auth.ApplicationKeyPair.PrivateKey != privateKey {
+		t.Fatalf("PrivateKey = %v, want %q", securosysClient.Auth.ApplicationKeyPair.PrivateKey, privateKey)
+	}
+	if securosysClient.Auth.ApplicationKeyPair.PublicKey == nil || *securosysClient.Auth.ApplicationKeyPair.PublicKey != publicKey {
+		t.Fatalf("PublicKey = %v, want %q", securosysClient.Auth.ApplicationKeyPair.PublicKey, publicKey)
+	}
+	if got := securosysClient.Auth.ApiKeys.KeyManagementToken; len(got) != 1 || got[0] != "management" {
+		t.Fatalf("KeyManagementToken = %v, want [management]", got)
+	}
+	if got := securosysClient.Auth.ApiKeys.KeyOperationToken; len(got) != 1 || got[0] != "operation" {
+		t.Fatalf("KeyOperationToken = %v, want [operation]", got)
+	}
+	if got := securosysClient.Auth.ApiKeys.ServiceToken; len(got) != 1 || got[0] != "service" {
+		t.Fatalf("ServiceToken = %v, want [service]", got)
 	}
 }
 

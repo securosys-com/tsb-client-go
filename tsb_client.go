@@ -31,35 +31,35 @@ type TSBClient struct {
 	Auth       AuthStruct
 }
 type AuthStruct struct {
-	AppName                string      `json:"appName"`
-	AuthType               string      `json:"auth"`
-	CertPath               string      `json:"certpath"`
-	KeyPath                string      `json:"keypath"`
-	CertPEM                string      `json:"certPem,omitempty"`
-	KeyPEM                 string      `json:"keyPem,omitempty"`
-	BearerToken            string      `json:"bearertoken"`
-	ApiKeys                ApiKeyTypes `json:"apikey"`
-	ApplicationKeyPair     KeyPair     `json:"applicationKeyPair"`
+	AppName                string      `json:"app_name" mapstructure:"app_name"`
+	AuthType               string      `json:"auth" mapstructure:"auth"`
+	CertPath               string      `json:"cert_path" mapstructure:"cert_path"`
+	KeyPath                string      `json:"key_path" mapstructure:"key_path"`
+	CertPEM                string      `json:"cert_pem,omitempty" mapstructure:"cert_pem"`
+	KeyPEM                 string      `json:"key_pem,omitempty" mapstructure:"key_pem"`
+	BearerToken            string      `json:"bearer_token" mapstructure:"bearer_token"`
+	ApiKeys                ApiKeyTypes `json:"api_keys" mapstructure:"api_keys"`
+	ApplicationKeyPair     KeyPair     `json:"application_key_pair" mapstructure:"application_key_pair"`
 	CurrentApiKeyTypeIndex ApiKeyTypesRetry
 }
 type KeyPair struct {
-	PrivateKey *string `json:"privateKey,omitempty"`
-	PublicKey  *string `json:"publicKey,omitempty"`
+	PrivateKey *string `json:"private_key,omitempty" mapstructure:"private_key"`
+	PublicKey  *string `json:"public_key,omitempty" mapstructure:"public_key"`
 }
 
 type ApiKeyTypes struct {
-	KeyManagementToken         []string `json:"KeyManagementToken,omitempty"`
-	KeyOperationToken          []string `json:"KeyOperationToken,omitempty"`
-	ApproverToken              []string `json:"ApproverToken,omitempty"`
-	ServiceToken               []string `json:"ServiceToken,omitempty"`
-	ApproverKeyManagementToken []string `json:"ApproverKeyManagementToken,omitempty"`
+	KeyManagementToken         []string `json:"key_management_token,omitempty" mapstructure:"key_management_token"`
+	KeyOperationToken          []string `json:"key_operation_token,omitempty" mapstructure:"key_operation_token"`
+	ApproverToken              []string `json:"approver_token,omitempty" mapstructure:"approver_token"`
+	ServiceToken               []string `json:"service_token,omitempty" mapstructure:"service_token"`
+	ApproverKeyManagementToken []string `json:"approver_key_management_token,omitempty" mapstructure:"approver_key_management_token"`
 }
 type ApiKeyTypesRetry struct {
-	KeyManagementTokenIndex         int
-	KeyOperationTokenIndex          int
-	ApproverTokenIndex              int
-	ServiceTokenIndex               int
-	ApproverKeyManagementTokenIndex int
+	KeyManagementTokenIndex         int `json:"key_management_token_index" mapstructure:"key_management_token_index"`
+	KeyOperationTokenIndex          int `json:"key_operation_token_index" mapstructure:"key_operation_token_index"`
+	ApproverTokenIndex              int `json:"approver_token_index" mapstructure:"approver_token_index"`
+	ServiceTokenIndex               int `json:"service_token_index" mapstructure:"service_token_index"`
+	ApproverKeyManagementTokenIndex int `json:"approver_key_management_token_index" mapstructure:"approver_key_management_token_index"`
 }
 
 const (

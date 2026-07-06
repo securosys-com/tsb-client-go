@@ -41,14 +41,14 @@ type KeyAttributes struct {
 // SecurosysConfig includes the minimum configuration
 // required to instantiate a new Securosys TSB client.
 type SecurosysConfig struct {
-	Auth               string `json:"auth"`
-	BearerToken        string `json:"bearertoken"`
-	CertPath           string `json:"certpath"`
-	KeyPath            string `json:"keypath"`
-	RestApi            string `json:"restapi"`
-	AppName            string `json:"appName"`
-	ApplicationKeyPair string `json:"applicationKeyPair"`
-	ApiKeys            string `json:"apiKeys"`
+	Auth               string `json:"auth" mapstructure:"auth"`
+	BearerToken        string `json:"bearer_token" mapstructure:"bearer_token"`
+	CertPath           string `json:"cert_path" mapstructure:"cert_path"`
+	KeyPath            string `json:"key_path" mapstructure:"key_path"`
+	RestApi            string `json:"rest_api" mapstructure:"rest_api"`
+	AppName            string `json:"app_name" mapstructure:"app_name"`
+	ApplicationKeyPair string `json:"application_key_pair" mapstructure:"application_key_pair"`
+	ApiKeys            string `json:"api_keys" mapstructure:"api_keys"`
 }
 
 // Structure for certificate operations
