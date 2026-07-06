@@ -20,6 +20,15 @@ govulncheck:
   script:
     - go run golang.org/x/vuln/cmd/govulncheck@v1.6.0 ./...
 
+# https://staticcheck.dev/
+staticcheck:
+  stage: lint
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+    - if: $CI_COMMIT_BRANCH && $CI_COMMIT_BRANCH != "main"
+  script:
+    - go run honnef.co/go/tools/cmd/staticcheck@2026.1 $(go list ./...)
+
 test:
   stage: test
   rules:
