@@ -1,5 +1,9 @@
 image: golang:1.25
 
+default:
+  tags:
+    - Go
+
 stages:
   - test
   - mirror
@@ -9,8 +13,6 @@ test:
   rules:
     - if: $CI_PIPELINE_SOURCE == "merge_request_event"
     - if: $CI_COMMIT_BRANCH && $CI_COMMIT_BRANCH != "main"
-  tags:
-    - Go
   script:
     - go test -count=1 -v -timeout 20m ./...
 
@@ -18,8 +20,6 @@ mirror:
   rules:
     - if: $CI_COMMIT_BRANCH == "main"
   stage: mirror
-  tags:
-    - Go
   script:
     - git fetch --tags origin
     - git remote remove github || true
@@ -30,8 +30,6 @@ mirror_tag:
   rules:
     - if: $CI_COMMIT_TAG
   stage: mirror
-  tags:
-    - Go
   script:
     - git fetch --tags origin
     - git remote remove github || true
