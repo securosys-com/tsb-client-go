@@ -14,7 +14,6 @@ import (
 	"encoding/pem"
 	"errors"
 	"fmt"
-	"math/rand"
 	"reflect"
 	"strconv"
 	"strings"
@@ -235,13 +234,6 @@ func PrepareMetaData(requestType string, additionalMetaData map[string]string, c
 		b64.StdEncoding.EncodeToString([]byte(hex.EncodeToString(bs))), nil
 }
 
-const (
-	letterBytes     = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ"
-	specialBytes    = "!@#$%^&*()_+-=[]{}\\|;':\",.<>/?`~"
-	numBytes        = "0123456789"
-	hexDecimalBytes = "0123456789ABCDEF"
-)
-
 func MinifyJson(requestData string) string {
 	dst := &bytes.Buffer{}
 	if err := json.Compact(dst, []byte(requestData)); err != nil {
@@ -249,30 +241,6 @@ func MinifyJson(requestData string) string {
 	}
 	return dst.String()
 
-}
-
-func GeneratePassword(length int, useLetters bool, useSpecial bool, useNum bool, useHexadecimal bool) string {
-	rand.Seed(time.Now().UnixNano())
-	b := make([]byte, length)
-	arrayForRandom := make([]byte, 0)
-	if useLetters {
-		arrayForRandom = append(arrayForRandom, letterBytes...)
-	}
-	if useSpecial {
-		arrayForRandom = append(arrayForRandom, specialBytes...)
-	}
-	if useNum {
-		arrayForRandom = append(arrayForRandom, numBytes...)
-	}
-	if useHexadecimal {
-		arrayForRandom = append(arrayForRandom, hexDecimalBytes...)
-
-	}
-
-	for i := range b {
-		b[i] = arrayForRandom[rand.Intn(len(arrayForRandom))]
-	}
-	return string(b)
 }
 
 func ReadCertificate(possibleCertificate string) (*x509.Certificate, error) {
