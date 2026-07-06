@@ -103,7 +103,9 @@ client, err := tsb.NewTSBClient("https://tsb.example.com", tsb.AuthStruct{
 })
 ```
 
-API keys are optional from the client side. Add them when your TSB tenant or endpoint is configured to require API keys. When configured, API keys are sent as `X-API-KEY`. The client chooses the API key group by operation:
+API keys are optional from the client side. Add them when your TSB tenant or endpoint is configured to require API keys.
+When configured, API keys are sent in the `X-API-KEY` header field.
+The client chooses the API key group by operation:
 
 - key management operations use `KeyManagementToken`
 - sign, verify, encrypt, decrypt, wrap, unwrap, block, unblock, certificates, and requests use `KeyOperationToken`
@@ -118,7 +120,7 @@ The test suite includes live TSB integration tests. Tests that need TSB read con
 Create a local `.env` file:
 
 ```sh
-export TSB_URL="https://engineering.securosys.com/tsb-demo"
+export TSB_URL="https://sbx-rest-api.cloudshsm.com/"
 
 # TOKEN auth. Leave commented when using NONE auth or CERT auth.
 # export TSB_BEARER_TOKEN=""
