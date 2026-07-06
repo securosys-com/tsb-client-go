@@ -382,6 +382,7 @@ func stripTestDotEnvComment(value string) string {
 	return value
 }
 
+//lint:ignore U1000 keep for the future
 func envDefault(name string, fallback string) string {
 	value := os.Getenv(name)
 	if value == "" {
@@ -390,6 +391,7 @@ func envDefault(name string, fallback string) string {
 	return value
 }
 
+//lint:ignore U1000 keep for the future
 func envFloatDefault(name string, fallback float64) float64 {
 	value := os.Getenv(name)
 	if value == "" {

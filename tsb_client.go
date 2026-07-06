@@ -277,14 +277,14 @@ func (c *TSBClient) WrapPrivateKeyWithHeaders(pkcs8 bool) []byte {
 	if c.Auth.ApplicationKeyPair.PrivateKey == nil {
 		return nil
 	}
-	if pkcs8 == false {
-		return []byte("-----BEGIN RSA PRIVATE KEY-----\n" + *c.Auth.ApplicationKeyPair.PrivateKey + "\n-----END RSA PRIVATE KEY-----")
-	} else {
+
+	if pkcs8 {
 		return []byte("-----BEGIN PRIVATE KEY-----\n" + *c.Auth.ApplicationKeyPair.PrivateKey + "\n-----END PRIVATE KEY-----")
-
+	} else {
+		return []byte("-----BEGIN RSA PRIVATE KEY-----\n" + *c.Auth.ApplicationKeyPair.PrivateKey + "\n-----END RSA PRIVATE KEY-----")
 	}
-
 }
+
 func (c *TSBClient) GenerateRequestSignature(requestData string) []byte {
 	if c.Auth.ApplicationKeyPair.PrivateKey == nil || c.Auth.ApplicationKeyPair.PublicKey == nil {
 		return []byte("null")
@@ -293,7 +293,7 @@ func (c *TSBClient) GenerateRequestSignature(requestData string) []byte {
 	if err := json.Compact(dst, []byte(requestData)); err != nil {
 		panic(err)
 	}
-	signature, _ := c.SignData([]byte(dst.String()))
+	signature, _ := c.SignData(dst.Bytes())
 	return []byte(`{
 		"signature": "` + *signature + `",
 		"digestAlgorithm": "SHA-256",
@@ -301,9 +301,10 @@ func (c *TSBClient) GenerateRequestSignature(requestData string) []byte {
 		}
 	`)
 }
+
 func (c *TSBClient) SignData(dataToSign []byte) (*string, error) {
 	if c.Auth.ApplicationKeyPair.PrivateKey == nil || c.Auth.ApplicationKeyPair.PublicKey == nil {
-		return nil, fmt.Errorf("No Application Private Key or Public Key provided!")
+		return nil, fmt.Errorf("no Application Private Key or Public Key provided")
 	}
 	h := sha256.New()
 	h.Write(dataToSign)
