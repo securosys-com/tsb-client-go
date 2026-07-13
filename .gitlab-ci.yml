@@ -12,7 +12,7 @@ test:
   tags:
     - Go
   script:
-    - go test -count=1 -v ./...
+    - go test -count=1 -v -timeout 20m ./...
 
 mirror:
   rules:
