@@ -4,6 +4,8 @@
 package client
 
 import (
+	"context"
+	"strings"
 	"testing"
 
 	helpers "github.com/securosys-com/tsb-client-go/helpers"
@@ -65,6 +67,7 @@ func TestCreateAndDeleteKeyWithTSB(t *testing.T) {
 			defer deleteTestKeyIfExists(t, tsbClient, tc.label)
 
 			label, err := tsbClient.CreateOrUpdateKey(
+				context.Background(),
 				tc.label,
 				testKeyPassword,
 				tc.attributes,
@@ -88,7 +91,7 @@ func deleteTestKeyIfExists(t *testing.T, tsbClient *TSBClient, label string) {
 	if label == "" {
 		return
 	}
-	tsbClient.RemoveKey(label)
+	tsbClient.RemoveKey(context.Background(), label)
 }
 
 func testKeyCases() []testKeyCase {
@@ -175,4 +178,100 @@ func TestKeyTestCasesUseSupportedTypes(t *testing.T) {
 			t.Fatalf("test key type %q is not listed in helpers.SUPPORTED_KEY_TYPES", tc.keyType)
 		}
 	}
+}
+
+func TestPostQuantumKeyTypesAreSupported(t *testing.T) {
+	expected := []string{
+		"ML-DSA-44",
+		"ML-DSA-65",
+		"ML-DSA-87",
+		"SLH-DSA-SHA2-128s",
+		"SLH-DSA-SHA2-128f",
+		"SLH-DSA-SHA2-192s",
+		"SLH-DSA-SHA2-192f",
+		"SLH-DSA-SHA2-256s",
+		"SLH-DSA-SHA2-256f",
+		"SLH-DSA-SHAKE-128s",
+		"SLH-DSA-SHAKE-128f",
+		"SLH-DSA-SHAKE-192s",
+		"SLH-DSA-SHAKE-192f",
+		"SLH-DSA-SHAKE-256s",
+		"SLH-DSA-SHAKE-256f",
+		"ML-KEM-512",
+		"ML-KEM-768",
+		"ML-KEM-1024",
+		"LMS",
+		"XMSS-SHA256_10_256",
+		"XMSS-SHAKE256_10_256",
+	}
+
+	supported := make(map[string]struct{}, len(helpers.SUPPORTED_KEY_TYPES))
+	for _, keyType := range helpers.SUPPORTED_KEY_TYPES {
+		supported[keyType] = struct{}{}
+	}
+	for _, keyType := range expected {
+		if _, ok := supported[keyType]; !ok {
+			t.Fatalf("post-quantum key type %q is not listed in helpers.SUPPORTED_KEY_TYPES", keyType)
+		}
+	}
+}
+
+func TestCreateAndDeletePostQuantumKeysWithTSB(t *testing.T) {
+	tsbClient := newTestTSBClientFromEnv(t)
+
+	for _, keyType := range helpers.POST_QUANTUM_KEY_TYPES {
+		keyType := keyType
+		t.Run(keyType, func(t *testing.T) {
+			label := "go-client-test-pqc-" + safeTestKeyLabel(keyType)
+			deleteTestKeyIfExists(t, tsbClient, label)
+			defer deleteTestKeyIfExists(t, tsbClient, label)
+
+			createdLabel, err := tsbClient.CreateOrUpdateKey(
+				context.Background(),
+				label,
+				testKeyPassword,
+				testPostQuantumCreateKeyAttributes(keyType),
+				keyType,
+				defaultEmptyKeySize,
+				nil,
+				"",
+				false,
+			)
+			requireNoError(t, err)
+
+			if createdLabel != label {
+				t.Fatalf("label = %q, want %q", createdLabel, label)
+			}
+
+			key, err := tsbClient.GetKey(context.Background(), label, testKeyPassword)
+			requireNoError(t, err)
+			expectedAlgorithm := expectedPostQuantumAlgorithm(keyType)
+			if key.Algorithm != expectedAlgorithm {
+				t.Fatalf("algorithm = %q, want %q", key.Algorithm, expectedAlgorithm)
+			}
+		})
+	}
+}
+
+func testPostQuantumCreateKeyAttributes(keyType string) map[string]bool {
+	if strings.HasPrefix(keyType, "ML-KEM-") {
+		return testPostQuantumWrapKeyAttributes()
+	}
+	return testPostQuantumSignKeyAttributes()
+}
+
+func expectedPostQuantumAlgorithm(keyType string) string {
+	switch keyType {
+	case "LMS":
+		return "HSS-LMS"
+	case "XMSS-SHA256_10_256", "XMSS-SHAKE256_10_256":
+		return "XMSS"
+	default:
+		return keyType
+	}
+}
+
+func safeTestKeyLabel(value string) string {
+	replacer := strings.NewReplacer("-", "_", "/", "_")
+	return replacer.Replace(value)
 }

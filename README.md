@@ -169,6 +169,12 @@ Run a single test:
 go test -v ./... -run TestCreateSignVerifyAllAlgorithmsAndDeleteKeyWithTSB
 ```
 
+Run the post-quantum key creation test:
+
+```sh
+go test -v ./... -run TestCreateAndDeletePostQuantumKeysWithTSB
+```
+
 Authentication selection in tests:
 
 - if `TSB_BEARER_TOKEN` is set, tests use `TOKEN` auth
@@ -224,6 +230,7 @@ password := ""
 payload := base64.StdEncoding.EncodeToString([]byte("message to sign"))
 
 label, err := client.CreateOrUpdateKey(
+	ctx,
 	"example-ec-sign-key",
 	password,
 	keyAttributes(),
@@ -236,7 +243,7 @@ label, err := client.CreateOrUpdateKey(
 if err != nil {
 	log.Fatal(err)
 }
-defer client.RemoveKey(label)
+defer client.RemoveKey(ctx, label)
 
 signature, status, err := client.Sign(
 	ctx,
@@ -275,6 +282,7 @@ password := ""
 payload := base64.StdEncoding.EncodeToString([]byte("0123456789abcdef"))
 
 label, err := client.CreateOrUpdateKey(
+	ctx,
 	"example-aes-encrypt-key",
 	password,
 	keyAttributes(),
@@ -287,7 +295,7 @@ label, err := client.CreateOrUpdateKey(
 if err != nil {
 	log.Fatal(err)
 }
-defer client.RemoveKey(label)
+defer client.RemoveKey(ctx, label)
 
 encrypted, status, err := client.Encrypt(
 	ctx,
@@ -334,6 +342,7 @@ ctx := context.Background()
 password := ""
 
 wrapKey, err := client.CreateOrUpdateKey(
+	ctx,
 	"example-aes-wrap-key",
 	password,
 	keyAttributes(),
@@ -346,9 +355,10 @@ wrapKey, err := client.CreateOrUpdateKey(
 if err != nil {
 	log.Fatal(err)
 }
-defer client.RemoveKey(wrapKey)
+defer client.RemoveKey(ctx, wrapKey)
 
 keyToWrap, err := client.CreateOrUpdateKey(
+	ctx,
 	"example-aes-key-to-wrap",
 	password,
 	keyAttributes(),
@@ -361,8 +371,8 @@ keyToWrap, err := client.CreateOrUpdateKey(
 if err != nil {
 	log.Fatal(err)
 }
-defer client.RemoveKey(keyToWrap)
-defer client.RemoveKey("example-aes-unwrapped-key")
+defer client.RemoveKey(ctx, keyToWrap)
+defer client.RemoveKey(ctx, "example-aes-unwrapped-key")
 
 wrapped, status, err := client.Wrap(
 	wrapKey,
@@ -408,6 +418,30 @@ The unwrap target label must be different from the source key label.
 - `ChaCha20`
 - `Camellia`
 - `TDEA`
+
+Post-quantum:
+
+- `ML-DSA-44`
+- `ML-DSA-65`
+- `ML-DSA-87`
+- `SLH-DSA-SHA2-128s`
+- `SLH-DSA-SHA2-128f`
+- `SLH-DSA-SHA2-192s`
+- `SLH-DSA-SHA2-192f`
+- `SLH-DSA-SHA2-256s`
+- `SLH-DSA-SHA2-256f`
+- `SLH-DSA-SHAKE-128s`
+- `SLH-DSA-SHAKE-128f`
+- `SLH-DSA-SHAKE-192s`
+- `SLH-DSA-SHAKE-192f`
+- `SLH-DSA-SHAKE-256s`
+- `SLH-DSA-SHAKE-256f`
+- `ML-KEM-512`
+- `ML-KEM-768`
+- `ML-KEM-1024`
+- `LMS`
+- `XMSS-SHA256_10_256`
+- `XMSS-SHAKE256_10_256`
 
 ## Signature Types
 
@@ -473,6 +507,32 @@ Other:
 
 - `EDDSA`
 - `BLS`
+- `LMS`
+- `XMSS-SHA256_10_256`
+- `XMSS-SHAKE256_10_256`
+- `ML_DSA`
+- `ML_DSA_M`
+- `SLH_DSA`
+- `SHA2_224_WITH_ML_DSA`
+- `SHA2_256_WITH_ML_DSA`
+- `SHA2_384_WITH_ML_DSA`
+- `SHA2_512_WITH_ML_DSA`
+- `SHA3_224_WITH_ML_DSA`
+- `SHA3_256_WITH_ML_DSA`
+- `SHA3_384_WITH_ML_DSA`
+- `SHA3_512_WITH_ML_DSA`
+- `SHAKE_128_WITH_ML_DSA`
+- `SHAKE_256_WITH_ML_DSA`
+- `SHA2_224_WITH_SLH_DSA`
+- `SHA2_256_WITH_SLH_DSA`
+- `SHA2_384_WITH_SLH_DSA`
+- `SHA2_512_WITH_SLH_DSA`
+- `SHA3_224_WITH_SLH_DSA`
+- `SHA3_256_WITH_SLH_DSA`
+- `SHA3_384_WITH_SLH_DSA`
+- `SHA3_512_WITH_SLH_DSA`
+- `SHAKE_128_WITH_SLH_DSA`
+- `SHAKE_256_WITH_SLH_DSA`
 
 ## Encrypt And Decrypt Algorithms
 
@@ -534,6 +594,12 @@ RSA wrap methods:
 
 - `RSA_WRAP_PAD`
 - `RSA_WRAP_OAEP`
+
+ML-KEM wrap methods:
+
+- `ML-KEM-512`
+- `ML-KEM-768`
+- `ML-KEM-1024`
 
 ## Payload Types
 

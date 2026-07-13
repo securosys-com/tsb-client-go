@@ -7,6 +7,7 @@ import (
 	"context"
 	"encoding/json"
 	"os"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"testing"
@@ -34,6 +35,10 @@ const (
 	envServiceToken               = "TSB_SERVICE_TOKEN"
 	envApproverKeyManagementToken = "TSB_APPROVER_KEY_MANAGEMENT_TOKEN"
 )
+
+func init() {
+	loadTestDotEnv()
+}
 
 func TestNewTSBClientTrimsTrailingSlash(t *testing.T) {
 	tsbClient, err := NewTSBClient(testTSBURL, AuthStruct{
@@ -280,6 +285,99 @@ func envRequired(t *testing.T, name string) string {
 	value := os.Getenv(name)
 	if value == "" {
 		t.Fatalf("%s is required", name)
+	}
+	return value
+}
+
+func loadTestDotEnv() {
+	for _, path := range testDotEnvCandidates() {
+		loadTestDotEnvFile(path)
+	}
+}
+
+func testDotEnvCandidates() []string {
+	seen := map[string]bool{}
+	var candidates []string
+	add := func(path string) {
+		if path == "" || seen[path] {
+			return
+		}
+		seen[path] = true
+		candidates = append(candidates, path)
+	}
+
+	if cwd, err := os.Getwd(); err == nil {
+		dir := cwd
+		for {
+			add(filepath.Join(dir, ".env"))
+			parent := filepath.Dir(dir)
+			if parent == dir {
+				break
+			}
+			dir = parent
+		}
+	}
+	return candidates
+}
+
+func loadTestDotEnvFile(path string) {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return
+	}
+
+	for _, line := range strings.Split(string(data), "\n") {
+		line = strings.TrimSpace(line)
+		if line == "" || strings.HasPrefix(line, "#") {
+			continue
+		}
+		line = strings.TrimPrefix(line, "export ")
+		name, value, ok := strings.Cut(line, "=")
+		if !ok {
+			continue
+		}
+		name = strings.TrimSpace(name)
+		value = parseTestDotEnvValue(value)
+		if name != "" && os.Getenv(name) == "" {
+			_ = os.Setenv(name, value)
+		}
+	}
+}
+
+func parseTestDotEnvValue(value string) string {
+	value = strings.TrimSpace(stripTestDotEnvComment(value))
+	if len(value) < 2 {
+		return value
+	}
+	if strings.HasPrefix(value, `"`) && strings.HasSuffix(value, `"`) {
+		if unquoted, err := strconv.Unquote(value); err == nil {
+			return unquoted
+		}
+	}
+	if strings.HasPrefix(value, `'`) && strings.HasSuffix(value, `'`) {
+		return strings.TrimSuffix(strings.TrimPrefix(value, `'`), `'`)
+	}
+	return value
+}
+
+func stripTestDotEnvComment(value string) string {
+	inSingleQuote := false
+	inDoubleQuote := false
+	for i, r := range value {
+		switch r {
+		case '\'':
+			if !inDoubleQuote {
+				inSingleQuote = !inSingleQuote
+			}
+		case '"':
+			if !inSingleQuote {
+				inDoubleQuote = !inDoubleQuote
+			}
+		case '#':
+			if !inSingleQuote && !inDoubleQuote {
+				return value[:i]
+			}
+		}
 	}
 	return value
 }

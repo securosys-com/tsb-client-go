@@ -12,6 +12,8 @@ import (
 	"net/http"
 	"strings"
 	"testing"
+
+	helpers "github.com/securosys-com/tsb-client-go/helpers"
 )
 
 const (
@@ -42,6 +44,7 @@ func TestCreateSignVerifyAllAlgorithmsAndDeleteKeyWithTSB(t *testing.T) {
 			defer deleteTestKeyIfExists(t, tsbClient, tc.label)
 
 			label, err := tsbClient.CreateOrUpdateKey(
+				context.Background(),
 				tc.label,
 				testKeyPassword,
 				testKeyAttributes(),
@@ -89,6 +92,66 @@ func TestCreateSignVerifyAllAlgorithmsAndDeleteKeyWithTSB(t *testing.T) {
 						t.Fatal("signature is not valid")
 					}
 				})
+			}
+		})
+	}
+}
+
+func TestCreateSignVerifyPostQuantumKeysWithTSB(t *testing.T) {
+	tsbClient := newTestTSBClientFromEnv(t)
+
+	for _, keyType := range postQuantumSignKeyTypes() {
+		keyType := keyType
+		t.Run(keyType, func(t *testing.T) {
+			label := "go-client-test-pqc-sign-" + safeTestKeyLabel(keyType)
+			deleteTestKeyIfExists(t, tsbClient, label)
+			defer deleteTestKeyIfExists(t, tsbClient, label)
+
+			createdLabel, err := tsbClient.CreateOrUpdateKey(
+				context.Background(),
+				label,
+				testKeyPassword,
+				testPostQuantumSignKeyAttributes(),
+				keyType,
+				defaultEmptyKeySize,
+				nil,
+				"",
+				false,
+			)
+			requireNoError(t, err)
+
+			signatureAlgorithm := postQuantumSignatureAlgorithm(keyType)
+			signatureResponse, statusCode, err := tsbClient.Sign(
+				context.Background(),
+				createdLabel,
+				testKeyPassword,
+				testRSASignPayload,
+				testRSASignPayloadType,
+				signatureAlgorithm,
+				SignatureTypeDER,
+			)
+			requireNoError(t, err)
+			if statusCode != http.StatusOK {
+				t.Fatalf("sign status code = %d, want %d", statusCode, http.StatusOK)
+			}
+			if signatureResponse.Signature == "" {
+				t.Fatal("signature is empty")
+			}
+
+			valid, statusCode, err := tsbClient.Verify(
+				context.Background(),
+				createdLabel,
+				testKeyPassword,
+				testRSASignPayload,
+				signatureAlgorithm,
+				signatureResponse.Signature,
+			)
+			requireNoError(t, err)
+			if statusCode != http.StatusOK {
+				t.Fatalf("verify status code = %d, want %d", statusCode, http.StatusOK)
+			}
+			if !valid {
+				t.Fatal("signature is not valid")
 			}
 		})
 	}
@@ -165,6 +228,55 @@ func testSignCases() []testSignCase {
 			signatureType:       SignatureTypeDER,
 			signatureAlgorithms: BLS_SIGNATURE_ALGORITHM,
 		},
+	}
+}
+
+func TestPostQuantumSignKeyTypesAreSupported(t *testing.T) {
+	supported := make(map[string]struct{}, len(helpers.SUPPORTED_SIGN_KEYS))
+	for _, keyType := range helpers.SUPPORTED_SIGN_KEYS {
+		supported[keyType] = struct{}{}
+	}
+	for _, keyType := range postQuantumSignKeyTypes() {
+		if _, ok := supported[keyType]; !ok {
+			t.Fatalf("post-quantum sign key type %q is not listed in helpers.SUPPORTED_SIGN_KEYS", keyType)
+		}
+	}
+}
+
+func postQuantumSignKeyTypes() []string {
+	var keyTypes []string
+	for _, keyType := range helpers.POST_QUANTUM_KEY_TYPES {
+		if strings.HasPrefix(keyType, "ML-KEM-") {
+			continue
+		}
+		keyTypes = append(keyTypes, keyType)
+	}
+	return keyTypes
+}
+
+func testPostQuantumSignKeyAttributes() map[string]bool {
+	return map[string]bool{
+		attributeDecrypt:     false,
+		attributeEncrypt:     false,
+		attributeDestroyable: true,
+		attributeExtractable: true,
+		attributeSign:        true,
+		attributeUnwrap:      false,
+		attributeVerify:      true,
+		attributeWrap:        false,
+	}
+}
+
+func postQuantumSignatureAlgorithm(keyType string) SignatureAlgorithm {
+	switch {
+	case strings.HasPrefix(keyType, "ML-DSA-"):
+		return SignatureAlgorithm("ML_DSA")
+	case strings.HasPrefix(keyType, "SLH-DSA-"):
+		return SignatureAlgorithm("SLH_DSA")
+	case strings.HasPrefix(keyType, "XMSS-"):
+		return SignatureAlgorithm(keyType)
+	default:
+		return SignatureAlgorithm(keyType)
 	}
 }
 

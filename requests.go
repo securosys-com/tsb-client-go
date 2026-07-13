@@ -35,8 +35,12 @@ func (c *TSBClient) GetRequest(ctx context.Context, id string) (*helpers.Request
 }
 
 // Function thats sends delete request to TSB
-func (c *TSBClient) RemoveRequest(id string) (int, error) {
-	req, err := http.NewRequest("DELETE", c.HostURL+"/v1/request/"+id, nil)
+func (c *TSBClient) RemoveRequest(ctx context.Context, id string) (int, error) {
+	if ctx == nil {
+		ctx = context.Background()
+	}
+
+	req, err := http.NewRequestWithContext(ctx, "DELETE", c.HostURL+"/v1/request/"+id, nil)
 	if err != nil {
 		return 500, err
 	}

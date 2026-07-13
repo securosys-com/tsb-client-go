@@ -5,6 +5,7 @@ package client
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"net/http"
 
@@ -12,7 +13,11 @@ import (
 )
 
 // Function thats send block request to TSB
-func (c *TSBClient) Block(label string, password string) (int, error) {
+func (c *TSBClient) Block(ctx context.Context, label string, password string) (int, error) {
+	if ctx == nil {
+		ctx = context.Background()
+	}
+
 	charsPasswordJson, _ := json.Marshal(helpers.StringToCharArray(password))
 	passwordString := ""
 	if len(charsPasswordJson) > 2 {
@@ -27,7 +32,7 @@ func (c *TSBClient) Block(label string, password string) (int, error) {
 		}
 	  }`)
 
-	req, err := http.NewRequest("POST", c.HostURL+"/v1/synchronousBlock", bytes.NewBuffer(jsonStr))
+	req, err := http.NewRequestWithContext(ctx, "POST", c.HostURL+"/v1/synchronousBlock", bytes.NewBuffer(jsonStr))
 	if err != nil {
 		return 500, err
 	}
@@ -40,7 +45,11 @@ func (c *TSBClient) Block(label string, password string) (int, error) {
 }
 
 // Function thats send asynchronous block request to TSB
-func (c *TSBClient) AsyncBlock(label string, password string, customMetaData map[string]string) (string, int, error) {
+func (c *TSBClient) AsyncBlock(ctx context.Context, label string, password string, customMetaData map[string]string) (string, int, error) {
+	if ctx == nil {
+		ctx = context.Background()
+	}
+
 	charsPasswordJson, _ := json.Marshal(helpers.StringToCharArray(password))
 	var additionalMetaDataInfo map[string]string = make(map[string]string)
 	metaDataB64, metaDataSignature, err := c.PrepareMetaData("Block", additionalMetaDataInfo, customMetaData)
@@ -69,7 +78,7 @@ func (c *TSBClient) AsyncBlock(label string, password string, customMetaData map
 
 	  }`))
 
-	req, err := http.NewRequest("POST", c.HostURL+"/v1/block", bytes.NewBuffer(jsonStr))
+	req, err := http.NewRequestWithContext(ctx, "POST", c.HostURL+"/v1/block", bytes.NewBuffer(jsonStr))
 	if err != nil {
 		return "", 500, err
 	}

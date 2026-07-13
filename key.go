@@ -14,7 +14,11 @@ import (
 )
 
 // Function thats sends update key password request to TSB
-func (c *TSBClient) UpdateKeyPassword(label string, password string, newPassword string) (string, error) {
+func (c *TSBClient) UpdateKeyPassword(ctx context.Context, label string, password string, newPassword string) (string, error) {
+	if ctx == nil {
+		ctx = context.Background()
+	}
+
 	charsPasswordJson, _ := json.Marshal(helpers.StringToCharArray(password))
 	charsNewPasswordJson, _ := json.Marshal(helpers.StringToCharArray(newPassword))
 	passwordString := ""
@@ -32,7 +36,7 @@ func (c *TSBClient) UpdateKeyPassword(label string, password string, newPassword
 			"label": "` + label + `"
 		}`)
 
-	req, err := http.NewRequest("POST", c.HostURL+"/v1/key/changePassword", bytes.NewBuffer(jsonStr))
+	req, err := http.NewRequestWithContext(ctx, "POST", c.HostURL+"/v1/key/changePassword", bytes.NewBuffer(jsonStr))
 	if err != nil {
 		return "", err
 	}
@@ -45,7 +49,10 @@ func (c *TSBClient) UpdateKeyPassword(label string, password string, newPassword
 }
 
 // CreateOrUpdateKey Function thats sends create key request to TSB
-func (c *TSBClient) CreateOrUpdateKey(label string, password string, attributes map[string]bool, keytype string, keySize float64, policy *helpers.Policy, curveOid string, modify bool) (string, error) {
+func (c *TSBClient) CreateOrUpdateKey(ctx context.Context, label string, password string, attributes map[string]bool, keytype string, keySize float64, policy *helpers.Policy, curveOid string, modify bool) (string, error) {
+	if ctx == nil {
+		ctx = context.Background()
+	}
 
 	charsPasswordJson, _ := json.Marshal(helpers.StringToCharArray(password))
 	policyJson, _ := json.Marshal(&policy)
@@ -78,16 +85,18 @@ func (c *TSBClient) CreateOrUpdateKey(label string, password string, attributes 
 	` + curveOidString + `
 	"attributes": ` + helpers.PrepareAttributes(attributes) + policyString + `}`)
 
-	req, err := http.NewRequest("POST", c.HostURL+"/v1/key", bytes.NewBuffer(jsonStr))
+	req, err := http.NewRequestWithContext(ctx, "POST", c.HostURL+"/v1/key", bytes.NewBuffer(jsonStr))
 	if err != nil {
 		return "", err
 	}
 	body, _, err := c.doRequest(req, KeyManagementTokenName)
 	if err != nil {
-		var result map[string]interface{}
-		errJSON := json.Unmarshal(body, &result)
-		if errJSON != nil {
-			return "", errJSON
+		if len(body) > 0 {
+			var result map[string]interface{}
+			errJSON := json.Unmarshal(body, &result)
+			if errJSON == nil {
+				return "", err
+			}
 		}
 		return "", err
 	}
@@ -95,7 +104,11 @@ func (c *TSBClient) CreateOrUpdateKey(label string, password string, attributes 
 }
 
 // Function thats sends delete key request to TSB
-func (c *TSBClient) RemoveKey(keyLabel string, password ...string) error {
+func (c *TSBClient) RemoveKey(ctx context.Context, keyLabel string, password ...string) error {
+	if ctx == nil {
+		ctx = context.Background()
+	}
+
 	passwordString := ""
 	if len(password) > 0 {
 		charsPasswordJson, _ := json.Marshal(helpers.StringToCharArray(password[0]))
@@ -107,7 +120,7 @@ func (c *TSBClient) RemoveKey(keyLabel string, password ...string) error {
 		"label": "` + keyLabel + `"` + passwordString + `
 	}`)
 
-	req, err := http.NewRequest("POST", c.HostURL+"/v1/key/deleteKey", bytes.NewBuffer(jsonStr))
+	req, err := http.NewRequestWithContext(ctx, "POST", c.HostURL+"/v1/key/deleteKey", bytes.NewBuffer(jsonStr))
 	if err != nil {
 		return err
 	}
@@ -120,7 +133,11 @@ func (c *TSBClient) RemoveKey(keyLabel string, password ...string) error {
 }
 
 // Function thats sends import key request to TSB
-func (c *TSBClient) ImportKey(label string, privateKey string, publicKey string, secretKey string, certificate string, attributes map[string]bool, keytype string, policy helpers.Policy) (map[string]interface{}, error) {
+func (c *TSBClient) ImportKey(ctx context.Context, label string, privateKey string, publicKey string, secretKey string, certificate string, attributes map[string]bool, keytype string, policy helpers.Policy) (map[string]interface{}, error) {
+	if ctx == nil {
+		ctx = context.Background()
+	}
+
 	policyJson, _ := json.Marshal(policy)
 	policyString := string(`,"policy":` + string(policyJson))
 	if attributes["extractable"] {
@@ -159,7 +176,7 @@ func (c *TSBClient) ImportKey(label string, privateKey string, publicKey string,
 	` + certificateString + `
 	"attributes": ` + helpers.PrepareAttributes(attributes) + policyString + `}`)
 
-	req, err := http.NewRequest("POST", c.HostURL+"/v1/key/import/plain", bytes.NewBuffer(jsonStr))
+	req, err := http.NewRequestWithContext(ctx, "POST", c.HostURL+"/v1/key/import/plain", bytes.NewBuffer(jsonStr))
 	if err != nil {
 		return nil, err
 	}
@@ -174,7 +191,11 @@ func (c *TSBClient) ImportKey(label string, privateKey string, publicKey string,
 }
 
 // Function thats sends export request to TSB
-func (c *TSBClient) ExportKey(label string, password string) (map[string]interface{}, error) {
+func (c *TSBClient) ExportKey(ctx context.Context, label string, password string) (map[string]interface{}, error) {
+	if ctx == nil {
+		ctx = context.Background()
+	}
+
 	charsPasswordJson, _ := json.Marshal(helpers.StringToCharArray(password))
 	passwordString := ""
 	if len(charsPasswordJson) > 2 {
@@ -188,7 +209,7 @@ func (c *TSBClient) ExportKey(label string, password string) (map[string]interfa
 		  
 	  }`)
 
-	req, err := http.NewRequest("POST", c.HostURL+"/v1/key/export/plain", bytes.NewBuffer(jsonStr))
+	req, err := http.NewRequestWithContext(ctx, "POST", c.HostURL+"/v1/key/export/plain", bytes.NewBuffer(jsonStr))
 	if err != nil {
 		return nil, err
 	}
@@ -270,9 +291,12 @@ func (c *TSBClient) GetKey(ctx context.Context, label string, password string) (
 }
 
 // Function thats sends get key attribute request to TSB
-func (c *TSBClient) GetKeys() ([]string, error) {
+func (c *TSBClient) GetKeys(ctx context.Context) ([]string, error) {
+	if ctx == nil {
+		ctx = context.Background()
+	}
 
-	req, err := http.NewRequest("GET", c.HostURL+"/v1/key", bytes.NewBuffer(nil))
+	req, err := http.NewRequestWithContext(ctx, "GET", c.HostURL+"/v1/key", bytes.NewBuffer(nil))
 	keys := []string{}
 	if err != nil {
 		return keys, err
