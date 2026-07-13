@@ -4,6 +4,7 @@ package client
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"net/http"
 
@@ -11,7 +12,11 @@ import (
 )
 
 // Function thats send request modify key to TSB
-func (c *TSBClient) Modify(label string, password string, policy helpers.Policy) (int, error) {
+func (c *TSBClient) Modify(ctx context.Context, label string, password string, policy helpers.Policy) (int, error) {
+	if ctx == nil {
+		ctx = context.Background()
+	}
+
 	policyJson, _ := json.Marshal(policy)
 	policyString := string(`,"policy":` + string(policyJson))
 
@@ -29,7 +34,7 @@ func (c *TSBClient) Modify(label string, password string, policy helpers.Policy)
 			` + policyString + `}
 		}`)
 
-	req, err := http.NewRequest("POST", c.HostURL+"/v1/synchronousModify", bytes.NewBuffer(jsonStr))
+	req, err := http.NewRequestWithContext(ctx, "POST", c.HostURL+"/v1/synchronousModify", bytes.NewBuffer(jsonStr))
 	if err != nil {
 		return 500, err
 	}
@@ -42,7 +47,11 @@ func (c *TSBClient) Modify(label string, password string, policy helpers.Policy)
 }
 
 // Function thats send asynchronous request modify key to TSB
-func (c *TSBClient) AsyncModify(label string, password string, policy helpers.Policy, customMetaData map[string]string) (string, int, error) {
+func (c *TSBClient) AsyncModify(ctx context.Context, label string, password string, policy helpers.Policy, customMetaData map[string]string) (string, int, error) {
+	if ctx == nil {
+		ctx = context.Background()
+	}
+
 	var additionalMetaDataInfo map[string]string = make(map[string]string)
 	metaDataB64, metaDataSignature, err := c.PrepareMetaData("Modify", additionalMetaDataInfo, customMetaData)
 	if err != nil {
@@ -71,7 +80,7 @@ func (c *TSBClient) AsyncModify(label string, password string, policy helpers.Po
 		"modifyRequest":` + requestJson + `,
 		"requestSignature":` + string(c.GenerateRequestSignature(requestJson)) + `
 		}`))
-	req, err := http.NewRequest("POST", c.HostURL+"/v1/modify", bytes.NewBuffer(jsonStr))
+	req, err := http.NewRequestWithContext(ctx, "POST", c.HostURL+"/v1/modify", bytes.NewBuffer(jsonStr))
 	if err != nil {
 		return "", 500, err
 	}

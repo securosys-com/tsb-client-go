@@ -5,6 +5,7 @@ package client
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"net/http"
 
@@ -12,7 +13,11 @@ import (
 )
 
 // Function thats send unblock request to TSB
-func (c *TSBClient) UnBlock(label string, password string) (int, error) {
+func (c *TSBClient) UnBlock(ctx context.Context, label string, password string) (int, error) {
+	if ctx == nil {
+		ctx = context.Background()
+	}
+
 	charsPasswordJson, _ := json.Marshal(helpers.StringToCharArray(password))
 	passwordString := ""
 	if len(charsPasswordJson) > 2 {
@@ -27,7 +32,7 @@ func (c *TSBClient) UnBlock(label string, password string) (int, error) {
 		}
 	  }`)
 
-	req, err := http.NewRequest("POST", c.HostURL+"/v1/synchronousUnblock", bytes.NewBuffer(jsonStr))
+	req, err := http.NewRequestWithContext(ctx, "POST", c.HostURL+"/v1/synchronousUnblock", bytes.NewBuffer(jsonStr))
 	if err != nil {
 		return 500, err
 	}
@@ -40,7 +45,11 @@ func (c *TSBClient) UnBlock(label string, password string) (int, error) {
 }
 
 // Function thats send asynchronous unblock request to TSB
-func (c *TSBClient) AsyncUnBlock(label string, password string, customMetaData map[string]string) (string, int, error) {
+func (c *TSBClient) AsyncUnBlock(ctx context.Context, label string, password string, customMetaData map[string]string) (string, int, error) {
+	if ctx == nil {
+		ctx = context.Background()
+	}
+
 	charsPasswordJson, _ := json.Marshal(helpers.StringToCharArray(password))
 	var additionalMetaDataInfo map[string]string = make(map[string]string)
 	metaDataB64, metaDataSignature, err := c.PrepareMetaData("UnBlock", additionalMetaDataInfo, customMetaData)
@@ -68,7 +77,7 @@ func (c *TSBClient) AsyncUnBlock(label string, password string, customMetaData m
 		"requestSignature":` + string(c.GenerateRequestSignature(requestJson)) + `
 	  }`))
 
-	req, err := http.NewRequest("POST", c.HostURL+"/v1/unblock", bytes.NewBuffer(jsonStr))
+	req, err := http.NewRequestWithContext(ctx, "POST", c.HostURL+"/v1/unblock", bytes.NewBuffer(jsonStr))
 	if err != nil {
 		return "", 500, err
 	}

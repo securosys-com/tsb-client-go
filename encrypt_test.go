@@ -44,6 +44,7 @@ func TestCreateEncryptDecryptAndDeleteKeysWithTSB(t *testing.T) {
 			defer deleteTestKeyIfExists(t, tsbClient, tc.label)
 
 			label, err := tsbClient.CreateOrUpdateKey(
+				context.Background(),
 				tc.label,
 				testKeyPassword,
 				tc.attributes,

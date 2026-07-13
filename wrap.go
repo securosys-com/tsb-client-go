@@ -5,6 +5,7 @@ package client
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -29,6 +30,9 @@ const (
 	WrapMethodAESPadBLS WrapMethod = "AES_WRAP_PAD_BLS"
 	WrapMethodRSAPad    WrapMethod = "RSA_WRAP_PAD"
 	WrapMethodRSAOAEP   WrapMethod = "RSA_WRAP_OAEP"
+	WrapMethodMLKEM512  WrapMethod = "ML-KEM-512"
+	WrapMethodMLKEM768  WrapMethod = "ML-KEM-768"
+	WrapMethodMLKEM1024 WrapMethod = "ML-KEM-1024"
 )
 
 var AES_WRAP_METHODS = []WrapMethod{
@@ -51,32 +55,34 @@ var RSA_WRAP_METHODS = []WrapMethod{
 	WrapMethodRSAOAEP,
 }
 
+var ML_KEM_WRAP_METHODS = []WrapMethod{
+	WrapMethodMLKEM512,
+	WrapMethodMLKEM768,
+	WrapMethodMLKEM1024,
+}
+
 // Function thats send wrap request to TSB
 func (c *TSBClient) Wrap(wrapKeyName string, wrapKeyPassword string, keyToBeWrapped string, keyToBeWrappedPassword string, wrapMethod WrapMethod) (*helpers.WrapResponse, int, error) {
-	keyToBeWrappedPasswordJson, _ := json.Marshal(helpers.StringToCharArray(keyToBeWrappedPassword))
-	wrapKeyPasswordJson, _ := json.Marshal(helpers.StringToCharArray(wrapKeyPassword))
-	keyToBeWrappedPasswordString := ""
-	if len(keyToBeWrappedPasswordJson) > 2 {
-		keyToBeWrappedPasswordString = `"keyToBeWrappedPassword": ` + string(keyToBeWrappedPasswordJson) + `,`
-
+	wrapKeyRequest := map[string]interface{}{
+		"keyToBeWrapped": keyToBeWrapped,
+		"wrapKeyName":    wrapKeyName,
+		"wrapMethod":     string(wrapMethod),
 	}
-	wrapKeyPasswordString := ""
-	if len(wrapKeyPasswordJson) > 2 {
-		wrapKeyPasswordString = `"wrapKeyPassword": ` + string(wrapKeyPasswordJson) + `,`
-
+	if keyToBeWrappedPassword != "" {
+		wrapKeyRequest["keyToBeWrappedPassword"] = helpers.StringToCharArray(keyToBeWrappedPassword)
+	}
+	if wrapKeyPassword != "" {
+		wrapKeyRequest["wrapKeyPassword"] = helpers.StringToCharArray(wrapKeyPassword)
 	}
 
-	var jsonStr = []byte(`{
-		"wrapKeyRequest": {
-		"keyToBeWrapped": "` + keyToBeWrapped + `",
-		` + keyToBeWrappedPasswordString + `
-		  "wrapKeyName": "` + wrapKeyName + `",
-		  ` + wrapKeyPasswordString + `
-		  "wrapMethod":"` + string(wrapMethod) + `"
-		}
-	  }`)
+	jsonStr, err := json.Marshal(map[string]interface{}{
+		"wrapKeyRequest": wrapKeyRequest,
+	})
+	if err != nil {
+		return nil, 500, err
+	}
 
-	req, err := http.NewRequest("POST", c.HostURL+"/v1/wrap", bytes.NewBuffer(jsonStr))
+	req, err := http.NewRequestWithContext(context.Background(), "POST", c.HostURL+"/v1/wrap", bytes.NewBuffer(jsonStr))
 	if err != nil {
 		return nil, 500, err
 	}
