@@ -1,16 +1,30 @@
 image: golang:1.25
 
+default:
+  tags:
+    - Go
+
 stages:
+  - lint
   - test
   - mirror
+
+# https://go.dev/doc/tutorial/govulncheck
+# Run via `go run` rather than `go install`: the shell executor's GOPATH/bin is
+# not on PATH, and pinning the version keeps the job reproducible.
+govulncheck:
+  stage: lint
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+    - if: $CI_COMMIT_BRANCH && $CI_COMMIT_BRANCH != "main"
+  script:
+    - go run golang.org/x/vuln/cmd/govulncheck@v1.6.0 ./...
 
 test:
   stage: test
   rules:
     - if: $CI_PIPELINE_SOURCE == "merge_request_event"
     - if: $CI_COMMIT_BRANCH && $CI_COMMIT_BRANCH != "main"
-  tags:
-    - Go
   script:
     - go test -count=1 -v -timeout 20m ./...
 
@@ -18,8 +32,6 @@ mirror:
   rules:
     - if: $CI_COMMIT_BRANCH == "main"
   stage: mirror
-  tags:
-    - Go
   script:
     - git fetch --tags origin
     - git remote remove github || true
@@ -30,8 +42,6 @@ mirror_tag:
   rules:
     - if: $CI_COMMIT_TAG
   stage: mirror
-  tags:
-    - Go
   script:
     - git fetch --tags origin
     - git remote remove github || true
