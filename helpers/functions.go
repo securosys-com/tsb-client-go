@@ -257,6 +257,10 @@ func ReadCertificate(possibleCertificate string) (*x509.Certificate, error) {
 
 func BytesToPublicKey(pub []byte) any {
 	block, _ := pem.Decode(pub)
+	if block == nil {
+		return nil
+	}
+
 	//lint:ignore SA1019 we need this feature
 	enc := x509.IsEncryptedPEMBlock(block)
 	b := block.Bytes

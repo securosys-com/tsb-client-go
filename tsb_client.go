@@ -227,10 +227,11 @@ func (c *TSBClient) doRequest(req *http.Request, apiKeyName string) ([]byte, int
 	req.Header.Set("Content-Type", "application/json")
 
 	res, err := c.HTTPClient.Do(req)
+	// make nilaway happy
+	if res == nil {
+		return nil, 0, err
+	}
 	if err != nil {
-		if res == nil {
-			return nil, 0, err
-		}
 		return nil, res.StatusCode, err
 	}
 	defer res.Body.Close()
@@ -262,11 +263,24 @@ func (c *TSBClient) GetApplicationPrivateKey() *rsa.PrivateKey {
 	if c.Auth.ApplicationKeyPair.PrivateKey == nil {
 		return nil
 	}
+
 	block, _ := pem.Decode(c.WrapPrivateKeyWithHeaders(false))
+	if block == nil {
+		return nil
+	}
+
 	key, _ := x509.ParsePKCS1PrivateKey(block.Bytes)
 	if key == nil {
 		block, _ = pem.Decode(c.WrapPrivateKeyWithHeaders(true))
-		parseResult, _ := x509.ParsePKCS8PrivateKey(block.Bytes)
+		if block == nil {
+			return nil
+		}
+
+		parseResult, err := x509.ParsePKCS8PrivateKey(block.Bytes)
+		if err != nil {
+			return nil
+		}
+
 		key := parseResult.(*rsa.PrivateKey)
 		return key
 	}
@@ -291,9 +305,16 @@ func (c *TSBClient) GenerateRequestSignature(requestData string) []byte {
 	}
 	dst := &bytes.Buffer{}
 	if err := json.Compact(dst, []byte(requestData)); err != nil {
+		// TODO: Propagate error. Requires updating all users of this function.
 		panic(err)
 	}
-	signature, _ := c.SignData(dst.Bytes())
+
+	signature, err := c.SignData(dst.Bytes())
+	if err != nil {
+		// TODO: Propagate error
+		panic(err)
+	}
+
 	return []byte(`{
 		"signature": "` + *signature + `",
 		"digestAlgorithm": "SHA-256",
