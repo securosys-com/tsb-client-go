@@ -84,28 +84,28 @@ func NewTSBClient(restApi string, settings AuthStruct) (*TSBClient, error) {
 }
 func (a *TSBClient) RollOverApiKey(name string) error {
 	switch name {
-	case "KeyManagementToken":
+	case KeyManagementTokenName:
 		a.Auth.CurrentApiKeyTypeIndex.KeyManagementTokenIndex += 1
 		return nil
-	case "KeyOperationToken":
+	case KeyOperationTokenName:
 		if len(a.Auth.ApiKeys.KeyOperationToken) == 0 {
 			return fmt.Errorf("no KeyOperationToken provided")
 		}
 		a.Auth.CurrentApiKeyTypeIndex.KeyOperationTokenIndex += 1
 		return nil
-	case "ApproverToken":
+	case ApproverTokenName:
 		if len(a.Auth.ApiKeys.ApproverToken) == 0 {
 			return fmt.Errorf("no ApproverToken provided")
 		}
 		a.Auth.CurrentApiKeyTypeIndex.ApproverTokenIndex += 1
 		return nil
-	case "ServiceToken":
+	case ServiceTokenName:
 		if len(a.Auth.ApiKeys.ServiceToken) == 0 {
 			return fmt.Errorf("no ServiceToken provided")
 		}
 		a.Auth.CurrentApiKeyTypeIndex.ServiceTokenIndex += 1
 		return nil
-	case "ApproverKeyManagementToken":
+	case ApproverKeyManagementTokenName:
 		if len(a.Auth.ApiKeys.ApproverKeyManagementToken) == 0 {
 			return fmt.Errorf("no ApproverKeyManagementToken provided")
 		}
@@ -118,7 +118,7 @@ func (a *TSBClient) RollOverApiKey(name string) error {
 
 func (a *TSBClient) CanGetNewApiKeyByName(name string) (bool, error) {
 	switch name {
-	case "KeyManagementToken":
+	case KeyManagementTokenName:
 		if len(a.Auth.ApiKeys.KeyManagementToken) == 0 {
 			return false, nil
 		}
@@ -126,7 +126,7 @@ func (a *TSBClient) CanGetNewApiKeyByName(name string) (bool, error) {
 			return true, nil
 		}
 		return false, fmt.Errorf("no more apikeys")
-	case "KeyOperationToken":
+	case KeyOperationTokenName:
 		if len(a.Auth.ApiKeys.KeyOperationToken) == 0 {
 			return false, nil
 		}
@@ -134,7 +134,7 @@ func (a *TSBClient) CanGetNewApiKeyByName(name string) (bool, error) {
 			return true, nil
 		}
 		return false, fmt.Errorf("no more apikeys")
-	case "ApproverToken":
+	case ApproverTokenName:
 		if len(a.Auth.ApiKeys.ApproverToken) == 0 {
 			return false, nil
 		}
@@ -142,7 +142,7 @@ func (a *TSBClient) CanGetNewApiKeyByName(name string) (bool, error) {
 			return true, nil
 		}
 		return false, fmt.Errorf("no more apikeys")
-	case "ServiceToken":
+	case ServiceTokenName:
 		if len(a.Auth.ApiKeys.ServiceToken) == 0 {
 			return false, nil
 		}
@@ -150,7 +150,7 @@ func (a *TSBClient) CanGetNewApiKeyByName(name string) (bool, error) {
 			return true, nil
 		}
 		return false, fmt.Errorf("no more apikeys")
-	case "ApproverKeyManagementToken":
+	case ApproverKeyManagementTokenName:
 		if len(a.Auth.ApiKeys.ApproverKeyManagementToken) == 0 {
 			return false, nil
 		}
@@ -165,15 +165,15 @@ func (a *TSBClient) CanGetNewApiKeyByName(name string) (bool, error) {
 
 func (a *TSBClient) GetApiKeyByName(name string) *string {
 	switch name {
-	case "KeyManagementToken":
+	case KeyManagementTokenName:
 		return &a.Auth.ApiKeys.KeyManagementToken[a.Auth.CurrentApiKeyTypeIndex.KeyManagementTokenIndex]
-	case "KeyOperationToken":
+	case KeyOperationTokenName:
 		return &a.Auth.ApiKeys.KeyOperationToken[a.Auth.CurrentApiKeyTypeIndex.KeyOperationTokenIndex]
-	case "ApproverToken":
+	case ApproverTokenName:
 		return &a.Auth.ApiKeys.ApproverToken[a.Auth.CurrentApiKeyTypeIndex.ApproverTokenIndex]
-	case "ServiceToken":
+	case ServiceTokenName:
 		return &a.Auth.ApiKeys.ServiceToken[a.Auth.CurrentApiKeyTypeIndex.ServiceTokenIndex]
-	case "ApproverKeyManagementToken":
+	case ApproverKeyManagementTokenName:
 		return &a.Auth.ApiKeys.ApproverKeyManagementToken[a.Auth.CurrentApiKeyTypeIndex.ApproverKeyManagementTokenIndex]
 	}
 	return nil
