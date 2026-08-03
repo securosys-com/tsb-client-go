@@ -14,6 +14,7 @@ import (
 	b64 "encoding/base64"
 	"encoding/json"
 	"encoding/pem"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -82,6 +83,7 @@ func NewTSBClient(restApi string, settings AuthStruct) (*TSBClient, error) {
 
 	return &c, nil
 }
+
 func (a *TSBClient) RollOverApiKey(name string) error {
 	switch name {
 	case KeyManagementTokenName:
@@ -111,80 +113,53 @@ func (a *TSBClient) RollOverApiKey(name string) error {
 		}
 		a.Auth.CurrentApiKeyTypeIndex.ApproverKeyManagementTokenIndex += 1
 		return nil
+	default:
+		return fmt.Errorf("no api keys exists for name=%s", name)
 	}
-	return fmt.Errorf("apikey usign name %s does not exist", name)
-
 }
 
-func (a *TSBClient) CanGetNewApiKeyByName(name string) (bool, error) {
+var ErrNoApiKeysConfigured = errors.New("no api key configured")
+var ErrNoApiKeysRemaining = errors.New("no api keys remaining (all failed)")
+
+func (a *TSBClient) GetApiKeyByName(name string) (string, error) {
+	var selectedIdx int
+	var selectedMap []string
+
 	switch name {
 	case KeyManagementTokenName:
-		if len(a.Auth.ApiKeys.KeyManagementToken) == 0 {
-			return false, nil
-		}
-		if len(a.Auth.ApiKeys.KeyManagementToken) > a.Auth.CurrentApiKeyTypeIndex.KeyManagementTokenIndex {
-			return true, nil
-		}
-		return false, fmt.Errorf("no more apikeys")
+		selectedIdx = a.Auth.CurrentApiKeyTypeIndex.KeyManagementTokenIndex
+		selectedMap = a.Auth.ApiKeys.KeyManagementToken
 	case KeyOperationTokenName:
-		if len(a.Auth.ApiKeys.KeyOperationToken) == 0 {
-			return false, nil
-		}
-		if len(a.Auth.ApiKeys.KeyOperationToken) > a.Auth.CurrentApiKeyTypeIndex.KeyOperationTokenIndex {
-			return true, nil
-		}
-		return false, fmt.Errorf("no more apikeys")
+		selectedIdx = a.Auth.CurrentApiKeyTypeIndex.KeyOperationTokenIndex
+		selectedMap = a.Auth.ApiKeys.KeyOperationToken
 	case ApproverTokenName:
-		if len(a.Auth.ApiKeys.ApproverToken) == 0 {
-			return false, nil
-		}
-		if len(a.Auth.ApiKeys.ApproverToken) > a.Auth.CurrentApiKeyTypeIndex.ApproverTokenIndex {
-			return true, nil
-		}
-		return false, fmt.Errorf("no more apikeys")
+		selectedIdx = a.Auth.CurrentApiKeyTypeIndex.ApproverTokenIndex
+		selectedMap = a.Auth.ApiKeys.ApproverToken
 	case ServiceTokenName:
-		if len(a.Auth.ApiKeys.ServiceToken) == 0 {
-			return false, nil
-		}
-		if len(a.Auth.ApiKeys.ServiceToken) > a.Auth.CurrentApiKeyTypeIndex.ServiceTokenIndex {
-			return true, nil
-		}
-		return false, fmt.Errorf("no more apikeys")
+		selectedIdx = a.Auth.CurrentApiKeyTypeIndex.ServiceTokenIndex
+		selectedMap = a.Auth.ApiKeys.ServiceToken
 	case ApproverKeyManagementTokenName:
-		if len(a.Auth.ApiKeys.ApproverKeyManagementToken) == 0 {
-			return false, nil
-		}
-		if len(a.Auth.ApiKeys.ApproverKeyManagementToken) > a.Auth.CurrentApiKeyTypeIndex.ApproverKeyManagementTokenIndex {
-			return true, nil
-		}
-		return false, fmt.Errorf("no more apikeys")
+		selectedIdx = a.Auth.CurrentApiKeyTypeIndex.ApproverKeyManagementTokenIndex
+		selectedMap = a.Auth.ApiKeys.ApproverKeyManagementToken
+	default:
+		return "", fmt.Errorf("no api keys exists for name=%s", name)
 	}
-	return false, fmt.Errorf("no apikey exists usign name %s", name)
 
-}
-
-func (a *TSBClient) GetApiKeyByName(name string) *string {
-	switch name {
-	case KeyManagementTokenName:
-		return &a.Auth.ApiKeys.KeyManagementToken[a.Auth.CurrentApiKeyTypeIndex.KeyManagementTokenIndex]
-	case KeyOperationTokenName:
-		return &a.Auth.ApiKeys.KeyOperationToken[a.Auth.CurrentApiKeyTypeIndex.KeyOperationTokenIndex]
-	case ApproverTokenName:
-		return &a.Auth.ApiKeys.ApproverToken[a.Auth.CurrentApiKeyTypeIndex.ApproverTokenIndex]
-	case ServiceTokenName:
-		return &a.Auth.ApiKeys.ServiceToken[a.Auth.CurrentApiKeyTypeIndex.ServiceTokenIndex]
-	case ApproverKeyManagementTokenName:
-		return &a.Auth.ApiKeys.ApproverKeyManagementToken[a.Auth.CurrentApiKeyTypeIndex.ApproverKeyManagementTokenIndex]
+	if len(selectedMap) == 0 {
+		return "", ErrNoApiKeysConfigured
 	}
-	return nil
+	if len(selectedMap) > selectedIdx {
+		return selectedMap[selectedIdx], nil
+	}
+	return "", ErrNoApiKeysRemaining
 }
 
 // Function that making all requests. Using config for Authorization to TSB
 func (c *TSBClient) doRequest(req *http.Request, apiKeyName string) ([]byte, int, error) {
-	// req.Header.Set("Authorization", c.Token)
 	if c.Auth.AuthType == "TOKEN" {
 		req.Header.Set("Authorization", "Bearer "+c.Auth.BearerToken)
 	}
+
 	if c.Auth.AuthType == "CERT" {
 		caCert := []byte(c.Auth.CertPEM)
 		if len(caCert) == 0 {
@@ -216,12 +191,13 @@ func (c *TSBClient) doRequest(req *http.Request, apiKeyName string) ([]byte, int
 			},
 		}
 	}
-	canGetApiKey, err := c.CanGetNewApiKeyByName(apiKeyName)
-	if err != nil {
+
+	apiKey, err := c.GetApiKeyByName(apiKeyName)
+	if err != nil && err != ErrNoApiKeysConfigured {
 		return []byte(fmt.Sprintf("All apikeys in group %s are invalid", apiKeyName)), 401, fmt.Errorf("status: %d, body: All apikeys in group %s are invalid", 401, apiKeyName)
 	}
-	if canGetApiKey {
-		req.Header.Set("X-API-KEY", *c.GetApiKeyByName(apiKeyName))
+	if apiKey != "" {
+		req.Header.Set("X-API-KEY", apiKey)
 	}
 
 	req.Header.Set("Content-Type", "application/json")
@@ -240,7 +216,8 @@ func (c *TSBClient) doRequest(req *http.Request, apiKeyName string) ([]byte, int
 	if err != nil {
 		return nil, res.StatusCode, err
 	}
-	if canGetApiKey && res.StatusCode == http.StatusUnauthorized {
+
+	if apiKey != "" && res.StatusCode == http.StatusUnauthorized {
 		var result map[string]interface{}
 		json.Unmarshal(body, &result)
 		errorCode := result["errorCode"].(float64)
@@ -248,7 +225,6 @@ func (c *TSBClient) doRequest(req *http.Request, apiKeyName string) ([]byte, int
 		if errorCode == 631 {
 			c.RollOverApiKey(apiKeyName)
 			return c.doRequest(req, apiKeyName)
-
 		}
 	}
 
