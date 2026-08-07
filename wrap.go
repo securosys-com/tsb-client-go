@@ -106,19 +106,10 @@ func (c *TSBClient) AsyncUnWrap(wrappedKey string, label string, attributes map[
 	additionalMetaDataInfo["new key label"] = label
 	additionalMetaDataInfo["wrap method"] = string(wrapMethod)
 	additionalMetaDataInfo["attributes"] = fmt.Sprintf("%v", attributes)
-	var policyString string
-	if policy == nil {
-		policyString = string(`,"policy":null`)
-	} else {
-		policyJson, _ := json.Marshal(*policy)
-		policyString = string(`,"policy":` + string(policyJson))
-	}
 
-	if attributes["extractable"] {
-		policyString = string(`,"policy":null`)
-	}
-	//Only for asychronous unwrap
-	policyString = string(``)
+	// Only for asychronous unwrap
+	policyString := string(``)
+
 	metaDataB64, metaDataSignature, err := c.PrepareMetaData("UnWrap", additionalMetaDataInfo, customMetaData)
 	if err != nil {
 		return "", 500, err

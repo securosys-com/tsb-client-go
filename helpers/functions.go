@@ -14,7 +14,6 @@ import (
 	"encoding/pem"
 	"errors"
 	"fmt"
-	"math/rand"
 	"reflect"
 	"strconv"
 	"strings"
@@ -40,11 +39,12 @@ func ContainsKey(m, k interface{}) bool {
 	v := reflect.ValueOf(m).MapIndex(reflect.ValueOf(k))
 	return v != reflect.Value{}
 }
+
 func ParsePublicKeyString(publicKey string) (crypto.PublicKey, error) {
 	var pkForImportingKey crypto.PublicKey
 	spkiBlock, _ := pem.Decode(WrapPublicKeyWithHeaders(publicKey))
 	if spkiBlock == nil {
-		return nil, fmt.Errorf("Cannot parse public key")
+		return nil, fmt.Errorf("cannot parse public key")
 	}
 	pubInterface, err := x509.ParsePKIXPublicKey(spkiBlock.Bytes)
 	if err != nil {
@@ -53,6 +53,7 @@ func ParsePublicKeyString(publicKey string) (crypto.PublicKey, error) {
 	pkForImportingKey = pubInterface
 	return pkForImportingKey, nil
 }
+
 func WrapPublicKeyWithHeaders(publicKey string) []byte {
 	return []byte("-----BEGIN PUBLIC KEY-----\n" + publicKey + "\n-----END PUBLIC KEY-----")
 }
@@ -60,10 +61,11 @@ func WrapPublicKeyWithHeaders(publicKey string) []byte {
 // This function preparing Policy structure for generating asynchronous keys
 func PrepareFullPolicy(policyString string, simplified bool, addKeyStatus bool) (*Policy, error) {
 	var PolicyObj Policy
-	if simplified == true {
 
+	if simplified {
 		var simplePolicy map[string]string
 		err := json.Unmarshal([]byte(policyString), &simplePolicy)
+
 		if err == nil {
 			token := PreparePolicyTokens(simplePolicy)
 			PolicyObj.RuleUse.Tokens = append(PolicyObj.RuleUse.Tokens, token)
@@ -73,7 +75,8 @@ func PrepareFullPolicy(policyString string, simplified bool, addKeyStatus bool) 
 			PolicyObj.RuleUnBlock.Tokens = append(PolicyObj.RuleUnBlock.Tokens, token)
 			PolicyObj.RuleModify = new(Rule)
 			PolicyObj.RuleModify.Tokens = append(PolicyObj.RuleModify.Tokens, token)
-			if addKeyStatus == true {
+
+			if addKeyStatus {
 				PolicyObj.KeyStatus = new(KeyStatus)
 				PolicyObj.KeyStatus.Blocked = false
 			}
@@ -83,6 +86,7 @@ func PrepareFullPolicy(policyString string, simplified bool, addKeyStatus bool) 
 			if err != nil {
 				return nil, err
 			}
+
 			if simplePolicy["use"] != nil {
 				token := PreparePolicyTokens(simplePolicy["use"])
 				PolicyObj.RuleUse.Tokens = append(PolicyObj.RuleUse.Tokens, token)
@@ -112,18 +116,17 @@ func PrepareFullPolicy(policyString string, simplified bool, addKeyStatus bool) 
 				PolicyObj.RuleModify.Tokens = append(PolicyObj.RuleModify.Tokens, token)
 			}
 
-			if addKeyStatus == true {
+			if addKeyStatus {
 				PolicyObj.KeyStatus = new(KeyStatus)
 				PolicyObj.KeyStatus.Blocked = false
 			}
-
 		}
 	} else {
 		err := json.Unmarshal([]byte(policyString), &PolicyObj)
 		if err != nil {
 			return nil, err
 		}
-		if addKeyStatus == false {
+		if !addKeyStatus {
 			PolicyObj.KeyStatus = nil
 		}
 
@@ -164,28 +167,26 @@ func PreparePolicyTokens(policy map[string]string) Token {
 	token.Name = "main"
 	token.Timeout = 0
 	token.Timelock = 0
+
 	if len(policy) == 0 {
 		token.Groups = nil
 	} else {
 		token.Groups = append(token.Groups, group)
-
 	}
 
 	return token
-
 }
 
 // Function converts attributes map into a json
 func PrepareAttributes(attributes map[string]bool) string {
 	json, _ := json.Marshal(attributes)
 	return string(json)
-
 }
 
 // Function checking if string exits in string array
-func Contains(s []string, str string) bool {
-	for _, v := range s {
-		if strings.ToLower(v) == strings.ToLower(str) {
+func Contains(array []string, str string) bool {
+	for _, v := range array {
+		if strings.EqualFold(v, str) {
 			return true
 		}
 	}
@@ -233,13 +234,6 @@ func PrepareMetaData(requestType string, additionalMetaData map[string]string, c
 		b64.StdEncoding.EncodeToString([]byte(hex.EncodeToString(bs))), nil
 }
 
-const (
-	letterBytes     = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ"
-	specialBytes    = "!@#$%^&*()_+-=[]{}\\|;':\",.<>/?`~"
-	numBytes        = "0123456789"
-	hexDecimalBytes = "0123456789ABCDEF"
-)
-
 func MinifyJson(requestData string) string {
 	dst := &bytes.Buffer{}
 	if err := json.Compact(dst, []byte(requestData)); err != nil {
@@ -249,33 +243,10 @@ func MinifyJson(requestData string) string {
 
 }
 
-func GeneratePassword(length int, useLetters bool, useSpecial bool, useNum bool, useHexadecimal bool) string {
-	rand.Seed(time.Now().UnixNano())
-	b := make([]byte, length)
-	arrayForRandom := make([]byte, 0)
-	if useLetters {
-		arrayForRandom = append(arrayForRandom, letterBytes...)
-	}
-	if useSpecial {
-		arrayForRandom = append(arrayForRandom, specialBytes...)
-	}
-	if useNum {
-		arrayForRandom = append(arrayForRandom, numBytes...)
-	}
-	if useHexadecimal {
-		arrayForRandom = append(arrayForRandom, hexDecimalBytes...)
-
-	}
-
-	for i := range b {
-		b[i] = arrayForRandom[rand.Intn(len(arrayForRandom))]
-	}
-	return string(b)
-}
 func ReadCertificate(possibleCertificate string) (*x509.Certificate, error) {
 	block, _ := pem.Decode([]byte("-----BEGIN CERTIFICATE-----\n" + possibleCertificate + "\n-----END CERTIFICATE-----\n"))
 	if block == nil {
-		return nil, fmt.Errorf("Cannot read certificate")
+		return nil, fmt.Errorf("cannot read certificate")
 	}
 	cert, err := x509.ParseCertificate(block.Bytes)
 	if err != nil {
@@ -283,12 +254,15 @@ func ReadCertificate(possibleCertificate string) (*x509.Certificate, error) {
 	}
 	return cert, nil
 }
+
 func BytesToPublicKey(pub []byte) any {
 	block, _ := pem.Decode(pub)
+	//lint:ignore SA1019 we need this feature
 	enc := x509.IsEncryptedPEMBlock(block)
 	b := block.Bytes
 	var err error
 	if enc {
+		//lint:ignore SA1019 we need this feature
 		b, err = x509.DecryptPEMBlock(block, nil)
 		if err != nil {
 			return nil
@@ -300,6 +274,7 @@ func BytesToPublicKey(pub []byte) any {
 	}
 	return ifc
 }
+
 func MapStringCurverToCurve(curveString string) string {
 	switch curveString {
 	case "1.2.840.10045.3.1.7":
