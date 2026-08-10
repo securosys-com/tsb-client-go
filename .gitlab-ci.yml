@@ -29,6 +29,16 @@ staticcheck:
   script:
     - go run honnef.co/go/tools/cmd/staticcheck@2026.1 $(go list ./...)
 
+# https://github.com/uber-go/nilaway
+nil-safety:
+  stage: lint
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+    - if: $CI_COMMIT_BRANCH && $CI_COMMIT_BRANCH != "main"
+  script:
+    # Exclude tests because t.Fatalf() leads to false positives
+    - go run go.uber.org/nilaway/cmd/nilaway@v0.0.0-20260803001828-dc48a6814e08 -test=false $(go list ./...)
+
 test:
   stage: test
   rules:

@@ -14,6 +14,7 @@ import (
 	b64 "encoding/base64"
 	"encoding/json"
 	"encoding/pem"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -82,109 +83,83 @@ func NewTSBClient(restApi string, settings AuthStruct) (*TSBClient, error) {
 
 	return &c, nil
 }
+
 func (a *TSBClient) RollOverApiKey(name string) error {
 	switch name {
-	case "KeyManagementToken":
+	case KeyManagementTokenName:
 		a.Auth.CurrentApiKeyTypeIndex.KeyManagementTokenIndex += 1
 		return nil
-	case "KeyOperationToken":
+	case KeyOperationTokenName:
 		if len(a.Auth.ApiKeys.KeyOperationToken) == 0 {
 			return fmt.Errorf("no KeyOperationToken provided")
 		}
 		a.Auth.CurrentApiKeyTypeIndex.KeyOperationTokenIndex += 1
 		return nil
-	case "ApproverToken":
+	case ApproverTokenName:
 		if len(a.Auth.ApiKeys.ApproverToken) == 0 {
 			return fmt.Errorf("no ApproverToken provided")
 		}
 		a.Auth.CurrentApiKeyTypeIndex.ApproverTokenIndex += 1
 		return nil
-	case "ServiceToken":
+	case ServiceTokenName:
 		if len(a.Auth.ApiKeys.ServiceToken) == 0 {
 			return fmt.Errorf("no ServiceToken provided")
 		}
 		a.Auth.CurrentApiKeyTypeIndex.ServiceTokenIndex += 1
 		return nil
-	case "ApproverKeyManagementToken":
+	case ApproverKeyManagementTokenName:
 		if len(a.Auth.ApiKeys.ApproverKeyManagementToken) == 0 {
 			return fmt.Errorf("no ApproverKeyManagementToken provided")
 		}
 		a.Auth.CurrentApiKeyTypeIndex.ApproverKeyManagementTokenIndex += 1
 		return nil
+	default:
+		return fmt.Errorf("no api keys exists for name=%s", name)
 	}
-	return fmt.Errorf("apikey usign name %s does not exist", name)
-
 }
 
-func (a *TSBClient) CanGetNewApiKeyByName(name string) (bool, error) {
-	switch name {
-	case "KeyManagementToken":
-		if len(a.Auth.ApiKeys.KeyManagementToken) == 0 {
-			return false, nil
-		}
-		if len(a.Auth.ApiKeys.KeyManagementToken) > a.Auth.CurrentApiKeyTypeIndex.KeyManagementTokenIndex {
-			return true, nil
-		}
-		return false, fmt.Errorf("no more apikeys")
-	case "KeyOperationToken":
-		if len(a.Auth.ApiKeys.KeyOperationToken) == 0 {
-			return false, nil
-		}
-		if len(a.Auth.ApiKeys.KeyOperationToken) > a.Auth.CurrentApiKeyTypeIndex.KeyOperationTokenIndex {
-			return true, nil
-		}
-		return false, fmt.Errorf("no more apikeys")
-	case "ApproverToken":
-		if len(a.Auth.ApiKeys.ApproverToken) == 0 {
-			return false, nil
-		}
-		if len(a.Auth.ApiKeys.ApproverToken) > a.Auth.CurrentApiKeyTypeIndex.ApproverTokenIndex {
-			return true, nil
-		}
-		return false, fmt.Errorf("no more apikeys")
-	case "ServiceToken":
-		if len(a.Auth.ApiKeys.ServiceToken) == 0 {
-			return false, nil
-		}
-		if len(a.Auth.ApiKeys.ServiceToken) > a.Auth.CurrentApiKeyTypeIndex.ServiceTokenIndex {
-			return true, nil
-		}
-		return false, fmt.Errorf("no more apikeys")
-	case "ApproverKeyManagementToken":
-		if len(a.Auth.ApiKeys.ApproverKeyManagementToken) == 0 {
-			return false, nil
-		}
-		if len(a.Auth.ApiKeys.ApproverKeyManagementToken) > a.Auth.CurrentApiKeyTypeIndex.ApproverKeyManagementTokenIndex {
-			return true, nil
-		}
-		return false, fmt.Errorf("no more apikeys")
-	}
-	return false, fmt.Errorf("no apikey exists usign name %s", name)
+var ErrNoApiKeysConfigured = errors.New("no api key configured")
+var ErrNoApiKeysRemaining = errors.New("no api keys remaining (all failed)")
 
-}
+func (a *TSBClient) GetApiKeyByName(name string) (string, error) {
+	var selectedIdx int
+	var selectedMap []string
 
-func (a *TSBClient) GetApiKeyByName(name string) *string {
 	switch name {
-	case "KeyManagementToken":
-		return &a.Auth.ApiKeys.KeyManagementToken[a.Auth.CurrentApiKeyTypeIndex.KeyManagementTokenIndex]
-	case "KeyOperationToken":
-		return &a.Auth.ApiKeys.KeyOperationToken[a.Auth.CurrentApiKeyTypeIndex.KeyOperationTokenIndex]
-	case "ApproverToken":
-		return &a.Auth.ApiKeys.ApproverToken[a.Auth.CurrentApiKeyTypeIndex.ApproverTokenIndex]
-	case "ServiceToken":
-		return &a.Auth.ApiKeys.ServiceToken[a.Auth.CurrentApiKeyTypeIndex.ServiceTokenIndex]
-	case "ApproverKeyManagementToken":
-		return &a.Auth.ApiKeys.ApproverKeyManagementToken[a.Auth.CurrentApiKeyTypeIndex.ApproverKeyManagementTokenIndex]
+	case KeyManagementTokenName:
+		selectedIdx = a.Auth.CurrentApiKeyTypeIndex.KeyManagementTokenIndex
+		selectedMap = a.Auth.ApiKeys.KeyManagementToken
+	case KeyOperationTokenName:
+		selectedIdx = a.Auth.CurrentApiKeyTypeIndex.KeyOperationTokenIndex
+		selectedMap = a.Auth.ApiKeys.KeyOperationToken
+	case ApproverTokenName:
+		selectedIdx = a.Auth.CurrentApiKeyTypeIndex.ApproverTokenIndex
+		selectedMap = a.Auth.ApiKeys.ApproverToken
+	case ServiceTokenName:
+		selectedIdx = a.Auth.CurrentApiKeyTypeIndex.ServiceTokenIndex
+		selectedMap = a.Auth.ApiKeys.ServiceToken
+	case ApproverKeyManagementTokenName:
+		selectedIdx = a.Auth.CurrentApiKeyTypeIndex.ApproverKeyManagementTokenIndex
+		selectedMap = a.Auth.ApiKeys.ApproverKeyManagementToken
+	default:
+		return "", fmt.Errorf("no api keys exists for name=%s", name)
 	}
-	return nil
+
+	if len(selectedMap) == 0 {
+		return "", ErrNoApiKeysConfigured
+	}
+	if len(selectedMap) > selectedIdx {
+		return selectedMap[selectedIdx], nil
+	}
+	return "", ErrNoApiKeysRemaining
 }
 
 // Function that making all requests. Using config for Authorization to TSB
 func (c *TSBClient) doRequest(req *http.Request, apiKeyName string) ([]byte, int, error) {
-	// req.Header.Set("Authorization", c.Token)
 	if c.Auth.AuthType == "TOKEN" {
 		req.Header.Set("Authorization", "Bearer "+c.Auth.BearerToken)
 	}
+
 	if c.Auth.AuthType == "CERT" {
 		caCert := []byte(c.Auth.CertPEM)
 		if len(caCert) == 0 {
@@ -216,21 +191,23 @@ func (c *TSBClient) doRequest(req *http.Request, apiKeyName string) ([]byte, int
 			},
 		}
 	}
-	canGetApiKey, err := c.CanGetNewApiKeyByName(apiKeyName)
-	if err != nil {
+
+	apiKey, err := c.GetApiKeyByName(apiKeyName)
+	if err != nil && err != ErrNoApiKeysConfigured {
 		return []byte(fmt.Sprintf("All apikeys in group %s are invalid", apiKeyName)), 401, fmt.Errorf("status: %d, body: All apikeys in group %s are invalid", 401, apiKeyName)
 	}
-	if canGetApiKey {
-		req.Header.Set("X-API-KEY", *c.GetApiKeyByName(apiKeyName))
+	if apiKey != "" {
+		req.Header.Set("X-API-KEY", apiKey)
 	}
 
 	req.Header.Set("Content-Type", "application/json")
 
 	res, err := c.HTTPClient.Do(req)
+	// make nilaway happy
+	if res == nil {
+		return nil, 0, err
+	}
 	if err != nil {
-		if res == nil {
-			return nil, 0, err
-		}
 		return nil, res.StatusCode, err
 	}
 	defer res.Body.Close()
@@ -239,7 +216,8 @@ func (c *TSBClient) doRequest(req *http.Request, apiKeyName string) ([]byte, int
 	if err != nil {
 		return nil, res.StatusCode, err
 	}
-	if canGetApiKey && res.StatusCode == http.StatusUnauthorized {
+
+	if apiKey != "" && res.StatusCode == http.StatusUnauthorized {
 		var result map[string]interface{}
 		json.Unmarshal(body, &result)
 		errorCode := result["errorCode"].(float64)
@@ -247,7 +225,6 @@ func (c *TSBClient) doRequest(req *http.Request, apiKeyName string) ([]byte, int
 		if errorCode == 631 {
 			c.RollOverApiKey(apiKeyName)
 			return c.doRequest(req, apiKeyName)
-
 		}
 	}
 
@@ -262,11 +239,24 @@ func (c *TSBClient) GetApplicationPrivateKey() *rsa.PrivateKey {
 	if c.Auth.ApplicationKeyPair.PrivateKey == nil {
 		return nil
 	}
+
 	block, _ := pem.Decode(c.WrapPrivateKeyWithHeaders(false))
+	if block == nil {
+		return nil
+	}
+
 	key, _ := x509.ParsePKCS1PrivateKey(block.Bytes)
 	if key == nil {
 		block, _ = pem.Decode(c.WrapPrivateKeyWithHeaders(true))
-		parseResult, _ := x509.ParsePKCS8PrivateKey(block.Bytes)
+		if block == nil {
+			return nil
+		}
+
+		parseResult, err := x509.ParsePKCS8PrivateKey(block.Bytes)
+		if err != nil {
+			return nil
+		}
+
 		key := parseResult.(*rsa.PrivateKey)
 		return key
 	}
@@ -291,9 +281,16 @@ func (c *TSBClient) GenerateRequestSignature(requestData string) []byte {
 	}
 	dst := &bytes.Buffer{}
 	if err := json.Compact(dst, []byte(requestData)); err != nil {
+		// TODO: Propagate error. Requires updating all users of this function.
 		panic(err)
 	}
-	signature, _ := c.SignData(dst.Bytes())
+
+	signature, err := c.SignData(dst.Bytes())
+	if err != nil {
+		// TODO: Propagate error
+		panic(err)
+	}
+
 	return []byte(`{
 		"signature": "` + *signature + `",
 		"digestAlgorithm": "SHA-256",
