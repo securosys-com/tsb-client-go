@@ -361,7 +361,7 @@ func testPostQuantumWrapKeyAttributes() map[string]bool {
 		attributeDecrypt:     false,
 		attributeEncrypt:     false,
 		attributeDestroyable: true,
-		attributeExtractable: true,
+		attributeExtractable: false,
 		attributeSign:        false,
 		attributeUnwrap:      true,
 		attributeVerify:      false,

@@ -148,6 +148,16 @@ type WrapResponse struct {
 	WrappedKey string `json:"wrappedKey"`
 	KeyVersion string `json:"keyVersion"`
 }
+type DecapsulationRequestResponse struct {
+	DecapsulationRequestID string `json:"decapsulationRequestId"`
+}
+type DecapsulationResponse struct {
+	SharedSecret string `json:"sharedSecret"`
+}
+type EncapsulationResponse struct {
+	SharedSecret string `json:"sharedSecret"`
+	Ciphertext   string `json:"ciphertext"`
+}
 type RandomResponse struct {
 	Random string `json:"random"`
 }
