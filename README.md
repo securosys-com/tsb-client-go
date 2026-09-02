@@ -121,7 +121,7 @@ When configured, API keys are sent in the `X-API-KEY` header field.
 The client chooses the API key group by operation:
 
 - key management operations use `KeyManagementToken`
-- sign, verify, encrypt, decrypt, wrap, unwrap, block, unblock, certificates, and requests use `KeyOperationToken`
+- sign, verify, encrypt, decrypt, encapsulate, decapsulate, wrap, unwrap, block, unblock, certificates, and requests use `KeyOperationToken`
 - random generation uses `ServiceToken`
 
 If multiple API keys are configured for a group, the client rolls over to the next one when TSB returns unauthorized error code `631`.
@@ -334,6 +334,95 @@ log.Printf("decrypted payload: %s", decrypted.Payload)
 Use tag length `128` for `AES_GCM` unless your integration needs a different supported tag length. Use `-1` for algorithms where no tag length should be sent.
 
 For `RSA_NO_PADDING`, decrypt returns the full RSA block. The original plaintext is right-aligned and zero-padded on the left.
+
+## ML-KEM Key Creation, Encapsulation, And Decapsulation
+
+ML-KEM is supported with `ML-KEM-512`, `ML-KEM-768`, and `ML-KEM-1024`. Create the decapsulation key in TSB with `wrap` and `unwrap` enabled and keep it non-extractable. The `encrypt` and `decrypt` attributes apply to encryption algorithms, whereas ML-KEM uses the separate encapsulation and decapsulation operations. ML-KEM does not use `keySize` or `curveOid`, so pass `0` and an empty string for those arguments.
+
+The following example creates an ML-KEM-768 key pair, retrieves its public key, encapsulates a shared secret with that public key, and recovers the same secret with the private key held by TSB:
+
+```go
+ctx := context.Background()
+password := ""
+
+mlkemAttributes := map[string]bool{
+	"decrypt":     false,
+	"encrypt":     false,
+	"extractable": false,
+	"sign":        false,
+	"unwrap":      true,
+	"verify":      false,
+	"wrap":        true,
+	"destroyable": true,
+}
+
+label, err := client.CreateOrUpdateKey(
+	ctx,
+	"example-ml-kem-768-key",
+	password,
+	mlkemAttributes,
+	"ML-KEM-768",
+	0,
+	nil,
+	"",
+	false,
+)
+if err != nil {
+	log.Fatal(err)
+}
+defer client.RemoveKey(ctx, label, password)
+
+key, err := client.GetKey(ctx, label, password)
+if err != nil {
+	log.Fatal(err)
+}
+if key.PublicKey == "" {
+	log.Fatal("TSB returned an empty ML-KEM public key")
+}
+
+encapsulated, status, err := client.Encapsulate(ctx, key.PublicKey)
+if err != nil {
+	log.Fatalf("encapsulation failed with status %d: %v", status, err)
+}
+
+decapsulated, status, err := client.Decapsulate(
+	ctx,
+	label,
+	password,
+	encapsulated.Ciphertext,
+)
+if err != nil {
+	log.Fatalf("decapsulation failed with status %d: %v", status, err)
+}
+if decapsulated.SharedSecret != encapsulated.SharedSecret {
+	log.Fatal("decapsulated shared secret does not match")
+}
+```
+
+`Encapsulate` accepts the public key string returned by `GetKey` and returns both `Ciphertext` and `SharedSecret`. Pass `Ciphertext` unchanged to `Decapsulate`; it returns the recovered `SharedSecret`. In an actual protocol, transmit the ciphertext to the holder of the ML-KEM private key and use the shared secret as input to an appropriate key derivation function. Do not transmit or persist the shared secret as plaintext.
+
+When the key policy requires approvals, submit asynchronous decapsulation instead:
+
+```go
+requestID, status, err := client.AsyncDecapsulate(
+	ctx,
+	label,
+	password,
+	encapsulated.Ciphertext,
+	map[string]string{"purpose": "establish session key"},
+)
+if err != nil {
+	log.Fatalf("asynchronous decapsulation failed with status %d: %v", status, err)
+}
+
+request, status, err := client.GetRequest(ctx, requestID)
+if err != nil {
+	log.Fatalf("get request failed with status %d: %v", status, err)
+}
+log.Printf("decapsulation request status: %s", request.Status)
+```
+
+`AsyncDecapsulate` returns a request ID, not the shared secret. Use the request APIs to track approval and execution and obtain the completed result.
 
 ## Wrap And Unwrap
 
