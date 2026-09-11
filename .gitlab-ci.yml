@@ -66,8 +66,12 @@ mirror_tag:
   rules:
     - if: $CI_COMMIT_TAG
   stage: mirror
+mirror_tag:
+  rules:
+    - if: $CI_COMMIT_TAG
+  stage: mirror
   script:
-    - git fetch --tags origin
+    - git fetch --force --tags origin
     - git remote remove github || true
     - git remote add github "https://x-access-token:${GH_TOKEN}@github.com/securosys-com/tsb-client-go.git"
-    - git push github "refs/tags/${CI_COMMIT_TAG}:refs/tags/${CI_COMMIT_TAG}"
+    - git push --force github "refs/tags/${CI_COMMIT_TAG}:refs/tags/${CI_COMMIT_TAG}"
