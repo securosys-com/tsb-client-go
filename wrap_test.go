@@ -87,7 +87,7 @@ func TestCreateWrapUnwrapAndDeleteKeysWithTSB(t *testing.T) {
 				t.Fatal("wrapped key is empty")
 			}
 
-			statusCode, err = tsbClient.UnWrap(
+			statusCode, err = tsbClient.Unwrap(context.Background(),
 				wrapResponse.WrappedKey,
 				unwrappedKeyLabel,
 				testKeyAttributes(),
@@ -171,7 +171,7 @@ func TestCreatePostQuantumWrapUnwrapAndDeleteKeysWithTSB(t *testing.T) {
 				t.Fatal("wrapped key is empty")
 			}
 
-			statusCode, err = tsbClient.UnWrap(
+			statusCode, err = tsbClient.Unwrap(context.Background(),
 				wrapResponse.WrappedKey,
 				unwrappedKeyLabel,
 				testKeyAttributes(),

@@ -1,8 +1,6 @@
 // SPDX-FileCopyrightText: Copyright 2026 Securosys SA
 // SPDX-License-Identifier: Apache-2.0
 
-//go:build go1.27
-
 package client
 
 import (

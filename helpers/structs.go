@@ -46,6 +46,8 @@ type SecurosysConfig struct {
 	BearerToken        string `json:"bearer_token" mapstructure:"bearer_token"`
 	CertPath           string `json:"cert_path" mapstructure:"cert_path"`
 	KeyPath            string `json:"key_path" mapstructure:"key_path"`
+	CertPEM            string `json:"cert_pem" mapstructure:"cert_pem"`
+	KeyPEM             string `json:"key_pem" mapstructure:"key_pem"`
 	RestApi            string `json:"rest_api" mapstructure:"rest_api"`
 	AppName            string `json:"app_name" mapstructure:"app_name"`
 	ApplicationKeyPair string `json:"application_key_pair" mapstructure:"application_key_pair"`

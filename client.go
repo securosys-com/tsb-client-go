@@ -33,6 +33,8 @@ func NewClient(config *helpers.SecurosysConfig) (*SecurosysClient, error) {
 		AuthType:           mappedConfig["auth"],
 		CertPath:           mappedConfig["cert_path"],
 		KeyPath:            mappedConfig["key_path"],
+		CertPEM:            mappedConfig["cert_pem"],
+		KeyPEM:             mappedConfig["key_pem"],
 		BearerToken:        mappedConfig["bearer_token"],
 		ApplicationKeyPair: keyPair,
 		ApiKeys:            apiKeys,

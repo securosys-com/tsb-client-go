@@ -130,8 +130,33 @@ var BLS_SIGNATURE_ALGORITHM = []SignatureAlgorithm{
 	SignatureAlgorithmBLS,
 }
 
-// Function thats sends sign request to TSB
+// Sign returns the completed signature. It uses the synchronous TSB endpoint
+// for a key without a policy and transparently submits and waits for an
+// asynchronous request when approvals are required.
 func (c *TSBClient) Sign(ctx context.Context, label string, password string, payload string, payloadType string, signatureAlgorithm SignatureAlgorithm, signatureType SignatureType) (*helpers.SignatureResponse, int, error) {
+	key, err := c.GetKey(ctx, label, password)
+	if err != nil {
+		return nil, http.StatusInternalServerError, err
+	}
+	if key.Policy != nil {
+		requestID, code, err := c.AsyncSign(ctx, label, password, payload, payloadType, signatureAlgorithm, signatureType, map[string]string{})
+		if err != nil {
+			return nil, code, err
+		}
+		request, code, err := c.WaitForRequest(ctx, requestID)
+		if err != nil {
+			return nil, code, err
+		}
+		if request.Status != "EXECUTED" {
+			return nil, code, fmt.Errorf("sign request %s completed with status %s", requestID, request.Status)
+		}
+		return &helpers.SignatureResponse{Signature: request.Result}, code, nil
+	}
+
+	return c.signSync(ctx, label, password, payload, payloadType, signatureAlgorithm, signatureType)
+}
+
+func (c *TSBClient) signSync(ctx context.Context, label string, password string, payload string, payloadType string, signatureAlgorithm SignatureAlgorithm, signatureType SignatureType) (*helpers.SignatureResponse, int, error) {
 	if ctx == nil {
 		ctx = context.Background()
 	}

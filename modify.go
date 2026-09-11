@@ -6,13 +6,39 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"fmt"
 	"net/http"
 
 	helpers "github.com/securosys-com/tsb-client-go/helpers"
 )
 
-// Function thats send request modify key to TSB
+// Modify updates a key policy. It uses the synchronous endpoint for a key
+// without a policy and transparently submits and waits for an asynchronous
+// request when approvals are required.
 func (c *TSBClient) Modify(ctx context.Context, label string, password string, policy helpers.Policy) (int, error) {
+	key, err := c.GetKey(ctx, label, password)
+	if err != nil {
+		return http.StatusInternalServerError, err
+	}
+	if key.Policy != nil {
+		requestID, code, err := c.AsyncModify(ctx, label, password, policy, map[string]string{})
+		if err != nil {
+			return code, err
+		}
+		request, code, err := c.WaitForRequest(ctx, requestID)
+		if err != nil {
+			return code, err
+		}
+		if request.Status != "EXECUTED" {
+			return code, fmt.Errorf("modify request %s completed with status %s", requestID, request.Status)
+		}
+		return code, nil
+	}
+
+	return c.modifySync(ctx, label, password, policy)
+}
+
+func (c *TSBClient) modifySync(ctx context.Context, label string, password string, policy helpers.Policy) (int, error) {
 	if ctx == nil {
 		ctx = context.Background()
 	}

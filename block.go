@@ -7,13 +7,39 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"fmt"
 	"net/http"
 
 	"github.com/securosys-com/tsb-client-go/helpers"
 )
 
-// Function thats send block request to TSB
+// Block blocks a key. It uses the synchronous endpoint for a key without a
+// policy and transparently submits and waits for an asynchronous request when
+// approvals are required.
 func (c *TSBClient) Block(ctx context.Context, label string, password string) (int, error) {
+	key, err := c.GetKey(ctx, label, password)
+	if err != nil {
+		return http.StatusInternalServerError, err
+	}
+	if key.Policy != nil {
+		requestID, code, err := c.AsyncBlock(ctx, label, password, map[string]string{})
+		if err != nil {
+			return code, err
+		}
+		request, code, err := c.WaitForRequest(ctx, requestID)
+		if err != nil {
+			return code, err
+		}
+		if request.Status != "EXECUTED" {
+			return code, fmt.Errorf("block request %s completed with status %s", requestID, request.Status)
+		}
+		return code, nil
+	}
+
+	return c.blockSync(ctx, label, password)
+}
+
+func (c *TSBClient) blockSync(ctx context.Context, label string, password string) (int, error) {
 	if ctx == nil {
 		ctx = context.Background()
 	}

@@ -7,13 +7,39 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"fmt"
 	"net/http"
 
 	helpers "github.com/securosys-com/tsb-client-go/helpers"
 )
 
-// Function thats send unblock request to TSB
-func (c *TSBClient) UnBlock(ctx context.Context, label string, password string) (int, error) {
+// Unblock unblocks a key. It uses the synchronous endpoint for a key without a
+// policy and transparently submits and waits for an asynchronous request when
+// approvals are required.
+func (c *TSBClient) Unblock(ctx context.Context, label string, password string) (int, error) {
+	key, err := c.GetKey(ctx, label, password)
+	if err != nil {
+		return http.StatusInternalServerError, err
+	}
+	if key.Policy != nil {
+		requestID, code, err := c.AsyncUnblock(ctx, label, password, map[string]string{})
+		if err != nil {
+			return code, err
+		}
+		request, code, err := c.WaitForRequest(ctx, requestID)
+		if err != nil {
+			return code, err
+		}
+		if request.Status != "EXECUTED" {
+			return code, fmt.Errorf("unblock request %s completed with status %s", requestID, request.Status)
+		}
+		return code, nil
+	}
+
+	return c.unblockSync(ctx, label, password)
+}
+
+func (c *TSBClient) unblockSync(ctx context.Context, label string, password string) (int, error) {
 	if ctx == nil {
 		ctx = context.Background()
 	}
@@ -44,8 +70,8 @@ func (c *TSBClient) UnBlock(ctx context.Context, label string, password string) 
 
 }
 
-// Function thats send asynchronous unblock request to TSB
-func (c *TSBClient) AsyncUnBlock(ctx context.Context, label string, password string, customMetaData map[string]string) (string, int, error) {
+// AsyncUnblock submits an asynchronous unblock request to TSB.
+func (c *TSBClient) AsyncUnblock(ctx context.Context, label string, password string, customMetaData map[string]string) (string, int, error) {
 	if ctx == nil {
 		ctx = context.Background()
 	}

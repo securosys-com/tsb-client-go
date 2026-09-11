@@ -7,6 +7,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"fmt"
 	"net/http"
 
 	"github.com/securosys-com/tsb-client-go/helpers"
@@ -64,8 +65,33 @@ func (c *TSBClient) AsyncDecapsulate(ctx context.Context, label string, password
 	return response.DecapsulationRequestID, code, nil
 }
 
-// Decapsulate synchronously recovers a shared secret from an ML-KEM ciphertext.
+// Decapsulate returns the recovered shared secret. It uses the synchronous TSB
+// endpoint for a key without a policy and transparently submits and waits for
+// an asynchronous request when approvals are required.
 func (c *TSBClient) Decapsulate(ctx context.Context, label string, password string, ciphertext string) (*helpers.DecapsulationResponse, int, error) {
+	key, err := c.GetKey(ctx, label, password)
+	if err != nil {
+		return nil, http.StatusInternalServerError, err
+	}
+	if key.Policy != nil {
+		requestID, code, err := c.AsyncDecapsulate(ctx, label, password, ciphertext, map[string]string{})
+		if err != nil {
+			return nil, code, err
+		}
+		request, code, err := c.WaitForRequest(ctx, requestID)
+		if err != nil {
+			return nil, code, err
+		}
+		if request.Status != "EXECUTED" {
+			return nil, code, fmt.Errorf("decapsulation request %s completed with status %s", requestID, request.Status)
+		}
+		return &helpers.DecapsulationResponse{SharedSecret: request.Result}, code, nil
+	}
+
+	return c.decapsulateSync(ctx, label, password, ciphertext)
+}
+
+func (c *TSBClient) decapsulateSync(ctx context.Context, label string, password string, ciphertext string) (*helpers.DecapsulationResponse, int, error) {
 	if ctx == nil {
 		ctx = context.Background()
 	}

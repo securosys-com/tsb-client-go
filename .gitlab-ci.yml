@@ -1,8 +1,12 @@
-image: golang:1.25
+image: golang:1.27
 
 default:
   tags:
     - Go
+
+variables:
+  # Build and test with the minimum Go 1.27 release used by this module.
+  GOTOOLCHAIN: go1.27.0
 
 stages:
   - lint
@@ -18,7 +22,8 @@ govulncheck:
     - if: $CI_PIPELINE_SOURCE == "merge_request_event"
     - if: $CI_COMMIT_BRANCH && $CI_COMMIT_BRANCH != "main"
   script:
-    - go run golang.org/x/vuln/cmd/govulncheck@v1.6.0 ./...
+    # Scan with the latest patched Go 1.27 toolchain.
+    - GOTOOLCHAIN=go1.27.1 go run golang.org/x/vuln/cmd/govulncheck@v1.8.0 ./...
 
 # https://staticcheck.dev/
 staticcheck:
@@ -27,7 +32,7 @@ staticcheck:
     - if: $CI_PIPELINE_SOURCE == "merge_request_event"
     - if: $CI_COMMIT_BRANCH && $CI_COMMIT_BRANCH != "main"
   script:
-    - go run honnef.co/go/tools/cmd/staticcheck@2026.1 $(go list ./...)
+    - go run honnef.co/go/tools/cmd/staticcheck@2026.2rc1 $(go list ./...)
 
 # https://github.com/uber-go/nilaway
 nil-safety:
