@@ -1,3 +1,3 @@
 module github.com/securosys-com/tsb-client-go
 
-go 1.25.12
+go 1.27

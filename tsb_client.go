@@ -28,9 +28,17 @@ const HostURL string = ""
 
 // TSBClient struct
 type TSBClient struct {
-	HostURL    string
-	HTTPClient *http.Client
-	Auth       AuthStruct
+	HostURL              string
+	HTTPClient           *http.Client
+	Auth                 AuthStruct
+	Logger               Logger
+	ApprovalPollInterval time.Duration
+}
+
+type Logger interface {
+	Info(message string, args ...interface{})
+	Debug(message string, args ...interface{})
+	Warn(message string, args ...interface{})
 }
 type AuthStruct struct {
 	AppName                string      `json:"app_name" mapstructure:"app_name"`

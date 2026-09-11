@@ -7,7 +7,9 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"fmt"
 	"net/http"
+	"slices"
 	"strconv"
 
 	helpers "github.com/securosys-com/tsb-client-go/helpers"
@@ -147,8 +149,35 @@ func (c *TSBClient) AsyncDecrypt(ctx context.Context, label string, password str
 
 }
 
-// Function thats sends decrypt request to TSB
+// Decrypt returns the completed plaintext. It uses the synchronous TSB endpoint
+// when possible and transparently submits and waits for an asynchronous request
+// when an asymmetric key has an approval policy.
 func (c *TSBClient) Decrypt(ctx context.Context, label string, password string, cipertext string, vector string, cipherAlgorithm CipherAlgorithm, tagLength int, additionalAuthenticationData string) (*helpers.DecryptResponse, int, error) {
+	if slices.Contains(RSA_CIPHER_ALGORITHM, cipherAlgorithm) {
+		key, err := c.GetKey(ctx, label, password)
+		if err != nil {
+			return nil, http.StatusInternalServerError, err
+		}
+		if key.Policy != nil {
+			requestID, code, err := c.AsyncDecrypt(ctx, label, password, cipertext, vector, cipherAlgorithm, tagLength, additionalAuthenticationData, map[string]string{})
+			if err != nil {
+				return nil, code, err
+			}
+			request, code, err := c.WaitForRequest(ctx, requestID)
+			if err != nil {
+				return nil, code, err
+			}
+			if request.Status != "EXECUTED" {
+				return nil, code, fmt.Errorf("decrypt request %s completed with status %s", requestID, request.Status)
+			}
+			return &helpers.DecryptResponse{Payload: request.Result}, code, nil
+		}
+	}
+
+	return c.decryptSync(ctx, label, password, cipertext, vector, cipherAlgorithm, tagLength, additionalAuthenticationData)
+}
+
+func (c *TSBClient) decryptSync(ctx context.Context, label string, password string, cipertext string, vector string, cipherAlgorithm CipherAlgorithm, tagLength int, additionalAuthenticationData string) (*helpers.DecryptResponse, int, error) {
 	if ctx == nil {
 		ctx = context.Background()
 	}

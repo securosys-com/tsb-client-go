@@ -98,17 +98,17 @@ func (c *TSBClient) Wrap(wrapKeyName string, wrapKeyPassword string, keyToBeWrap
 
 }
 
-// Function thats sends asynchronous unwrap request to TSB
-func (c *TSBClient) AsyncUnWrap(wrappedKey string, label string, attributes map[string]bool, unwrapKeyName string, unwrapKeyPassword string, wrapMethod WrapMethod, policy *helpers.Policy, customMetaData map[string]string) (string, int, error) {
+// AsyncUnwrap submits an asynchronous unwrap request to TSB.
+func (c *TSBClient) AsyncUnwrap(ctx context.Context, wrappedKey string, label string, attributes map[string]bool, unwrapKeyName string, unwrapKeyPassword string, wrapMethod WrapMethod, policy *helpers.Policy, customMetaData map[string]string) (string, int, error) {
+	if ctx == nil {
+		ctx = context.Background()
+	}
 	charsPasswordJson, _ := json.Marshal(helpers.StringToCharArray(unwrapKeyPassword))
 	var additionalMetaDataInfo map[string]string = make(map[string]string)
 	additionalMetaDataInfo["wrapped key"] = wrappedKey
 	additionalMetaDataInfo["new key label"] = label
 	additionalMetaDataInfo["wrap method"] = string(wrapMethod)
 	additionalMetaDataInfo["attributes"] = fmt.Sprintf("%v", attributes)
-
-	// Only for asychronous unwrap
-	policyString := string(``)
 
 	metaDataB64, metaDataSignature, err := c.PrepareMetaData("UnWrap", additionalMetaDataInfo, customMetaData)
 	if err != nil {
@@ -132,13 +132,13 @@ func (c *TSBClient) AsyncUnWrap(wrappedKey string, label string, attributes map[
 		"wrapMethod": "` + string(wrapMethod) + `",
 		"attributes": ` + helpers.PrepareAttributes(attributes) + `,
 		"metaData": "` + metaDataB64 + `",
-		"metaDataSignature": ` + metaDataSignatureString + `` + policyString + `
+		"metaDataSignature": ` + metaDataSignatureString + `
 		}`
 	var jsonStr = []byte(helpers.MinifyJson(`{
 			"unwrapKeyRequest": ` + requestJson + `,
 			"requestSignature":` + string(c.GenerateRequestSignature(requestJson)) + `
 		}`))
-	req, err := http.NewRequest("POST", c.HostURL+"/v1/unwrap", bytes.NewBuffer(jsonStr))
+	req, err := http.NewRequestWithContext(ctx, "POST", c.HostURL+"/v1/unwrap", bytes.NewBuffer(jsonStr))
 	if err != nil {
 		return "", 500, err
 	}
@@ -154,19 +154,37 @@ func (c *TSBClient) AsyncUnWrap(wrappedKey string, label string, attributes map[
 	return result["unwrapRequestId"].(string), code, nil
 }
 
-// Function thats sends unwrap request to TSB
-func (c *TSBClient) UnWrap(wrappedKey string, label string, attributes map[string]bool, unwrapKeyName string, unwrapKeyPassword string, wrapMethod WrapMethod, policy *helpers.Policy) (int, error) {
+// Unwrap unwraps a key. It uses the synchronous endpoint when the unwrapping
+// key has no policy and transparently submits and waits for an asynchronous
+// request when approvals are required.
+func (c *TSBClient) Unwrap(ctx context.Context, wrappedKey string, label string, attributes map[string]bool, unwrapKeyName string, unwrapKeyPassword string, wrapMethod WrapMethod, policy *helpers.Policy) (int, error) {
+	key, err := c.GetKey(ctx, unwrapKeyName, unwrapKeyPassword)
+	if err != nil {
+		return http.StatusInternalServerError, err
+	}
+	if key.Policy != nil {
+		requestID, code, err := c.AsyncUnwrap(ctx, wrappedKey, label, attributes, unwrapKeyName, unwrapKeyPassword, wrapMethod, policy, map[string]string{})
+		if err != nil {
+			return code, err
+		}
+		request, code, err := c.WaitForRequest(ctx, requestID)
+		if err != nil {
+			return code, err
+		}
+		if request.Status != "EXECUTED" {
+			return code, fmt.Errorf("unwrap request %s completed with status %s", requestID, request.Status)
+		}
+		return code, nil
+	}
+
+	return c.unwrapSync(ctx, wrappedKey, label, attributes, unwrapKeyName, unwrapKeyPassword, wrapMethod, policy)
+}
+
+func (c *TSBClient) unwrapSync(ctx context.Context, wrappedKey string, label string, attributes map[string]bool, unwrapKeyName string, unwrapKeyPassword string, wrapMethod WrapMethod, policy *helpers.Policy) (int, error) {
+	if ctx == nil {
+		ctx = context.Background()
+	}
 	charsPasswordJson, _ := json.Marshal(helpers.StringToCharArray(unwrapKeyPassword))
-	var policyString string
-	if policy == nil {
-		policyString = string(`,"policy":null`)
-	} else {
-		policyJson, _ := json.Marshal(policy)
-		policyString = string(`,"policy":` + string(policyJson))
-	}
-	if attributes["extractable"] {
-		policyString = string(`,"policy":null`)
-	}
 	passwordString := ""
 	if len(charsPasswordJson) > 2 {
 		passwordString = `"unwrapKeyPassword": ` + string(charsPasswordJson) + `,`
@@ -180,9 +198,9 @@ func (c *TSBClient) UnWrap(wrappedKey string, label string, attributes map[strin
 		"unwrapKeyName": "` + unwrapKeyName + `",
 		` + passwordString + `
 		"wrapMethod": "` + string(wrapMethod) + `",
-		"attributes": ` + helpers.PrepareAttributes(attributes) + policyString + `
+		"attributes": ` + helpers.PrepareAttributes(attributes) + `
 		}}`)
-	req, err := http.NewRequest("POST", c.HostURL+"/v1/synchronousUnwrap", bytes.NewBuffer(jsonStr))
+	req, err := http.NewRequestWithContext(ctx, "POST", c.HostURL+"/v1/synchronousUnwrap", bytes.NewBuffer(jsonStr))
 	if err != nil {
 		return 500, err
 	}
