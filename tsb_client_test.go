@@ -6,11 +6,13 @@ package client
 import (
 	"context"
 	"encoding/json"
+	"net/http"
 	"os"
 	"path/filepath"
 	"strconv"
 	"strings"
 	"testing"
+	"time"
 
 	helpers "github.com/securosys-com/tsb-client-go/helpers"
 )
@@ -49,6 +51,40 @@ func TestNewTSBClientTrimsTrailingSlash(t *testing.T) {
 
 	if tsbClient.HostURL != "https://tsb.example.test" {
 		t.Fatalf("HostURL = %q, want trailing slash trimmed", tsbClient.HostURL)
+	}
+}
+
+func TestNewTSBClientWithOptionsUsesCustomHTTPClient(t *testing.T) {
+	httpClient := &http.Client{Timeout: time.Second}
+
+	client, err := NewTSBClientWithOptions(
+		"https://tsb.example.com/",
+		AuthStruct{AuthType: "NONE"},
+		WithHTTPClient(httpClient),
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if client.HTTPClient != httpClient {
+		t.Fatal("custom HTTP client was not applied")
+	}
+	if client.HostURL != "https://tsb.example.com" {
+		t.Fatalf("HostURL = %q", client.HostURL)
+	}
+}
+
+func TestNewTSBClientWithOptionsIgnoresNilOptions(t *testing.T) {
+	client, err := NewTSBClientWithOptions(
+		"https://tsb.example.com",
+		AuthStruct{AuthType: "NONE"},
+		nil,
+		WithHTTPClient(nil),
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if client.HTTPClient == nil {
+		t.Fatal("default HTTP client is nil")
 	}
 }
 

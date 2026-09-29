@@ -40,6 +40,21 @@ func main() {
 }
 ```
 
+Use `NewTSBClientWithOptions` when the runtime provides a custom HTTP client or
+transport, for example a WASIp2 `wasi:http` RoundTripper:
+
+```go
+httpClient := &http.Client{Transport: customTransport}
+
+client, err := tsb.NewTSBClientWithOptions(
+    "https://tsb.example.com",
+    tsb.AuthStruct{AppName: "my-application", AuthType: "NONE"},
+    tsb.WithHTTPClient(httpClient),
+)
+```
+
+The existing `NewTSBClient` API remains unchanged.
+
 Use `NewClient` when you already have a `helpers.SecurosysConfig`. Serialized configuration parameters use snake_case:
 
 ```json

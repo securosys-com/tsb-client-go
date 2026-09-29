@@ -80,6 +80,20 @@ const (
 	ApproverKeyManagementTokenName = "ApproverKeyManagementToken"
 )
 
+// ClientOption configures a TSB client created with NewTSBClientWithOptions.
+type ClientOption func(*TSBClient)
+
+// WithHTTPClient configures the HTTP client used for TSB requests. This can be
+// used to supply a custom transport, including a wasi:http RoundTripper.
+// A nil client is ignored and leaves the default HTTP client in place.
+func WithHTTPClient(httpClient *http.Client) ClientOption {
+	return func(client *TSBClient) {
+		if httpClient != nil {
+			client.HTTPClient = httpClient
+		}
+	}
+}
+
 // Function inicialize new client for accessing TSB
 func NewTSBClient(restApi string, settings AuthStruct) (*TSBClient, error) {
 	restApi = strings.TrimSuffix(restApi, "/")
@@ -90,6 +104,21 @@ func NewTSBClient(restApi string, settings AuthStruct) (*TSBClient, error) {
 	}
 
 	return &c, nil
+}
+
+// NewTSBClientWithOptions creates a TSB client and applies optional
+// configuration. NewTSBClient remains available for backwards compatibility.
+func NewTSBClientWithOptions(restApi string, settings AuthStruct, options ...ClientOption) (*TSBClient, error) {
+	client, err := NewTSBClient(restApi, settings)
+	if err != nil {
+		return nil, err
+	}
+	for _, option := range options {
+		if option != nil {
+			option(client)
+		}
+	}
+	return client, nil
 }
 
 func (a *TSBClient) RollOverApiKey(name string) error {
