@@ -80,7 +80,7 @@ func TestGetDataObject(t *testing.T) {
 	defer server.Close()
 
 	client := newDataObjectTestClient(t, server.URL)
-	got, code, err := client.GetDataObject(nil, "test/object")
+	got, code, err := client.GetDataObject(context.Background(), "test/object")
 	requireNoError(t, err)
 	if code != http.StatusOK {
 		t.Fatalf("status = %d, want %d", code, http.StatusOK)

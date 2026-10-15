@@ -23,7 +23,7 @@ govulncheck:
     - if: $CI_COMMIT_BRANCH && $CI_COMMIT_BRANCH != "main"
   script:
     # Scan with the latest patched Go 1.27 toolchain.
-    - GOTOOLCHAIN=go1.27.1 go run golang.org/x/vuln/cmd/govulncheck@v1.8.0 ./...
+    - GOTOOLCHAIN=go1.27.2 go run golang.org/x/vuln/cmd/govulncheck@v1.8.0 ./...
 
 # https://staticcheck.dev/
 staticcheck:
