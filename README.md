@@ -237,6 +237,70 @@ Supported key attributes:
 
 Payloads passed to sign, verify, encrypt, and decrypt are base64 strings.
 
+## Data Objects
+
+Data objects store arbitrary data on the HSM. The value passed in
+`helpers.DataObject.Value` must be base64 encoded. Data object operations use
+the key management API key group (`KeyManagementToken`).
+
+```go
+ctx := context.Background()
+modifiable := false
+destroyable := true
+private := true
+dataObjectType := "SecretData"
+
+object := helpers.DataObject{
+	Name:  "example-secret",
+	Value: base64.StdEncoding.EncodeToString([]byte("secret value")),
+	Attributes: &helpers.DataObjectAttributes{
+		Modifiable:  &modifiable,
+		Destroyable: &destroyable,
+		Private:     &private,
+	},
+	KMIP: &helpers.DataObjectKMIP{
+		DataObjectType: &dataObjectType,
+	},
+}
+
+status, err := client.CreateDataObject(ctx, object)
+if err != nil {
+	log.Fatalf("create data object failed with status %d: %v", status, err)
+}
+
+stored, status, err := client.GetDataObject(ctx, object.Name)
+if err != nil {
+	log.Fatalf("get data object failed with status %d: %v", status, err)
+}
+
+decoded, err := base64.StdEncoding.DecodeString(stored.Value)
+if err != nil {
+	log.Fatal(err)
+}
+log.Printf("data object value: %s", decoded)
+
+status, err = client.DeleteDataObject(ctx, object.Name)
+if err != nil {
+	log.Fatalf("delete data object failed with status %d: %v", status, err)
+}
+```
+
+The example requires these additional imports:
+
+```go
+import (
+	"encoding/base64"
+
+	"github.com/securosys-com/tsb-client-go/helpers"
+)
+```
+
+`Attributes` and `KMIP` are optional. Attribute fields are pointers so an
+omitted value can be distinguished from an explicit `false`. Optional KMIP
+metadata also includes `Attributes`, `DateAttributes`, and `LinkAttributes`.
+Object names are safely escaped by `GetDataObject` and `DeleteDataObject`, so
+names containing spaces or `/` can be used without manual URL encoding.
+
 ## Sign And Verify
 
 ```go

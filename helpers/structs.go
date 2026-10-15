@@ -39,6 +39,31 @@ type KeyAttributes struct {
 	AttestationKeyName string
 }
 
+// DataObject represents arbitrary data stored on the HSM. Value must be
+// base64 encoded, as required by the TSB API.
+type DataObject struct {
+	Name       string                `json:"name"`
+	Value      string                `json:"value"`
+	Attributes *DataObjectAttributes `json:"attributes,omitempty"`
+	KMIP       *DataObjectKMIP       `json:"kmip,omitempty"`
+}
+
+// DataObjectAttributes controls how a data object can be managed on the HSM.
+// Pointer fields distinguish an omitted attribute from an explicit false.
+type DataObjectAttributes struct {
+	Modifiable  *bool `json:"modifiable,omitempty"`
+	Destroyable *bool `json:"destroyable,omitempty"`
+	Private     *bool `json:"private,omitempty"`
+}
+
+// DataObjectKMIP contains optional KMIP metadata associated with a data object.
+type DataObjectKMIP struct {
+	DataObjectType *string `json:"dataObjectType,omitempty"`
+	Attributes     *string `json:"attributes,omitempty"`
+	DateAttributes *string `json:"dateAttributes,omitempty"`
+	LinkAttributes *string `json:"linkAttributes,omitempty"`
+}
+
 // SecurosysConfig includes the minimum configuration
 // required to instantiate a new Securosys TSB client.
 type SecurosysConfig struct {
