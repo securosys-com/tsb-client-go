@@ -35,9 +35,9 @@ func TestCreateWrapUnwrapAndDeleteKeysWithTSB(t *testing.T) {
 
 	for i, tc := range testWrapUnwrapCases() {
 		t.Run(tc.name, func(t *testing.T) {
-			wrapKeyLabel := fmt.Sprintf("%s-%02d", testWrapKeyLabelPrefix, i)
-			wrappedKeyLabel := fmt.Sprintf("%s-%02d", testWrappedKeyLabelPrefix, i)
-			unwrappedKeyLabel := fmt.Sprintf("%s-%02d", testUnwrappedKeyLabelPrefix, i)
+			wrapKeyLabel := testKeyLabel(fmt.Sprintf("%s-%02d", testWrapKeyLabelPrefix, i))
+			wrappedKeyLabel := testKeyLabel(fmt.Sprintf("%s-%02d", testWrappedKeyLabelPrefix, i))
+			unwrappedKeyLabel := testKeyLabel(fmt.Sprintf("%s-%02d", testUnwrappedKeyLabelPrefix, i))
 
 			deleteTestKeyIfExists(t, tsbClient, wrapKeyLabel)
 			deleteTestKeyIfExists(t, tsbClient, wrappedKeyLabel)
@@ -119,9 +119,9 @@ func TestCreatePostQuantumWrapUnwrapAndDeleteKeysWithTSB(t *testing.T) {
 		i := i
 		tc := tc
 		t.Run(tc.name, func(t *testing.T) {
-			wrapKeyLabel := fmt.Sprintf("%s-pqc-%02d", testWrapKeyLabelPrefix, i)
-			wrappedKeyLabel := fmt.Sprintf("%s-pqc-%02d", testWrappedKeyLabelPrefix, i)
-			unwrappedKeyLabel := fmt.Sprintf("%s-pqc-%02d", testUnwrappedKeyLabelPrefix, i)
+			wrapKeyLabel := testKeyLabel(fmt.Sprintf("%s-pqc-%02d", testWrapKeyLabelPrefix, i))
+			wrappedKeyLabel := testKeyLabel(fmt.Sprintf("%s-pqc-%02d", testWrappedKeyLabelPrefix, i))
+			unwrappedKeyLabel := testKeyLabel(fmt.Sprintf("%s-pqc-%02d", testUnwrappedKeyLabelPrefix, i))
 
 			deleteTestKeyIfExists(t, tsbClient, wrapKeyLabel)
 			deleteTestKeyIfExists(t, tsbClient, wrappedKeyLabel)

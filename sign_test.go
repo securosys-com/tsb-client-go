@@ -103,7 +103,7 @@ func TestCreateSignVerifyPostQuantumKeysWithTSB(t *testing.T) {
 	for _, keyType := range postQuantumSignKeyTypes() {
 		keyType := keyType
 		t.Run(keyType, func(t *testing.T) {
-			label := "go-client-test-pqc-sign-" + safeTestKeyLabel(keyType)
+			label := testKeyLabel("go-client-test-pqc-sign-" + safeTestKeyLabel(keyType))
 			deleteTestKeyIfExists(t, tsbClient, label)
 			defer deleteTestKeyIfExists(t, tsbClient, label)
 
@@ -193,7 +193,7 @@ func testSignCases() []testSignCase {
 	return []testSignCase{
 		{
 			keyType:             keyTypeEC,
-			label:               testECSignKeyLabel,
+			label:               testKeyLabel(testECSignKeyLabel),
 			keySize:             defaultEmptyKeySize,
 			curveOID:            testKeyCurveOIDP256,
 			signatureType:       SignatureTypeRAW,
@@ -201,7 +201,7 @@ func testSignCases() []testSignCase {
 		},
 		{
 			keyType:             keyTypeED,
-			label:               testEDSignKeyLabel,
+			label:               testKeyLabel(testEDSignKeyLabel),
 			keySize:             defaultEmptyKeySize,
 			curveOID:            testKeyCurveED,
 			signatureType:       SignatureTypeRAW,
@@ -209,21 +209,21 @@ func testSignCases() []testSignCase {
 		},
 		{
 			keyType:             keyTypeRSA,
-			label:               testRSASignKeyLabel,
+			label:               testKeyLabel(testRSASignKeyLabel),
 			keySize:             defaultRSAKeySize,
 			signatureType:       SignatureTypeDER,
 			signatureAlgorithms: RSA_SIGNATURE_ALGORITHM,
 		},
 		{
 			keyType:             keyTypeDSA,
-			label:               testDSASignKeyLabel,
+			label:               testKeyLabel(testDSASignKeyLabel),
 			keySize:             defaultDSAKeySize,
 			signatureType:       SignatureTypeDER,
 			signatureAlgorithms: DSA_SIGNATURE_ALGORITHM,
 		},
 		{
 			keyType:             keyTypeBLS,
-			label:               testBLSSignKeyLabel,
+			label:               testKeyLabel(testBLSSignKeyLabel),
 			keySize:             defaultEmptyKeySize,
 			signatureType:       SignatureTypeDER,
 			signatureAlgorithms: BLS_SIGNATURE_ALGORITHM,

@@ -5,7 +5,9 @@ package client
 
 import (
 	"context"
+	"crypto/rand"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -16,6 +18,24 @@ import (
 
 	helpers "github.com/securosys-com/tsb-client-go/helpers"
 )
+
+var testRunID = newTestRunID()
+
+func newTestRunID() string {
+	if jobID := os.Getenv("CI_JOB_ID"); jobID != "" {
+		return safeTestKeyLabel(jobID)
+	}
+
+	var random [4]byte
+	if _, err := rand.Read(random[:]); err == nil {
+		return fmt.Sprintf("%x", random)
+	}
+	return strconv.FormatInt(time.Now().UnixNano(), 36)
+}
+
+func testKeyLabel(base string) string {
+	return base + "-" + testRunID
+}
 
 const (
 	testAppName = "Securosys Client Test"

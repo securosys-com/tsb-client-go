@@ -27,7 +27,7 @@ func TestCreateMLDSACertificatesWithTSBSignGo127(t *testing.T) {
 	for _, keyType := range []string{"ML-DSA-44", "ML-DSA-65", "ML-DSA-87"} {
 		keyType := keyType
 		t.Run(keyType, func(t *testing.T) {
-			label := "go-client-test-go127-cert-" + safeTestKeyLabel(keyType)
+			label := testKeyLabel("go-client-test-go127-cert-" + safeTestKeyLabel(keyType))
 			deleteTestKeyIfExists(t, tsbClient, label)
 			defer deleteTestKeyIfExists(t, tsbClient, label)
 

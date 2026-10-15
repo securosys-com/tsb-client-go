@@ -15,7 +15,7 @@ func TestEncapsulateAndDecapsulateWithTSB(t *testing.T) {
 	for _, keyType := range []string{"ML-KEM-512", "ML-KEM-768", "ML-KEM-1024"} {
 		keyType := keyType
 		t.Run(keyType, func(t *testing.T) {
-			label := "go-client-test-encapsulation-" + safeTestKeyLabel(keyType)
+			label := testKeyLabel("go-client-test-encapsulation-" + safeTestKeyLabel(keyType))
 			createMLKEMTestKey(t, tsbClient, label, keyType)
 			defer deleteTestKeyIfExists(t, tsbClient, label)
 
@@ -48,7 +48,7 @@ func TestEncapsulateAndDecapsulateWithTSB(t *testing.T) {
 
 func TestAsyncDecapsulateWithTSB(t *testing.T) {
 	tsbClient := newTestTSBClientFromEnv(t)
-	label := "go-client-test-async-decapsulation-ml_kem_512"
+	label := testKeyLabel("go-client-test-async-decapsulation-ml_kem_512")
 	createMLKEMTestKey(t, tsbClient, label, "ML-KEM-512")
 	defer deleteTestKeyIfExists(t, tsbClient, label)
 

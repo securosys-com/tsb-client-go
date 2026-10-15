@@ -98,57 +98,57 @@ func testKeyCases() []testKeyCase {
 	return []testKeyCase{
 		{
 			keyType:    keyTypeEC,
-			label:      testECKeyLabel,
+			label:      testKeyLabel(testECKeyLabel),
 			keySize:    defaultEmptyKeySize,
 			curveOID:   testKeyCurveOIDP256,
 			attributes: testKeyAttributes(),
 		},
 		{
 			keyType:    keyTypeED,
-			label:      testEDKeyLabel,
+			label:      testKeyLabel(testEDKeyLabel),
 			keySize:    defaultEmptyKeySize,
 			curveOID:   testKeyCurveED,
 			attributes: testKeyAttributes(),
 		},
 		{
 			keyType:    keyTypeRSA,
-			label:      testRSAKeyLabel,
+			label:      testKeyLabel(testRSAKeyLabel),
 			keySize:    defaultRSAKeySize,
 			attributes: testKeyAttributes(),
 		},
 		{
 			keyType:    keyTypeDSA,
-			label:      testDSAKeyLabel,
+			label:      testKeyLabel(testDSAKeyLabel),
 			keySize:    defaultDSAKeySize,
 			attributes: testKeyAttributes(),
 		},
 		{
 			keyType:    keyTypeBLS,
-			label:      testBLSKeyLabel,
+			label:      testKeyLabel(testBLSKeyLabel),
 			keySize:    defaultEmptyKeySize,
 			attributes: testKeyAttributes(),
 		},
 		{
 			keyType:    keyTypeAES,
-			label:      testAESKeyLabel,
+			label:      testKeyLabel(testAESKeyLabel),
 			keySize:    defaultAESKeySize,
 			attributes: testKeyAttributes(),
 		},
 		{
 			keyType:    keyTypeChaCha20,
-			label:      testChaCha20KeyLabel,
+			label:      testKeyLabel(testChaCha20KeyLabel),
 			keySize:    defaultChaCha20Size,
 			attributes: testKeyAttributes(),
 		},
 		{
 			keyType:    keyTypeCamellia,
-			label:      testCamelliaKeyLabel,
+			label:      testKeyLabel(testCamelliaKeyLabel),
 			keySize:    defaultCamelliaSize,
 			attributes: testKeyAttributes(),
 		},
 		{
 			keyType:    keyTypeTDEA,
-			label:      testTDEAKeyLabel,
+			label:      testKeyLabel(testTDEAKeyLabel),
 			keySize:    defaultTDEAKeySize,
 			attributes: testKeyAttributes(),
 		},
@@ -222,7 +222,7 @@ func TestCreateAndDeletePostQuantumKeysWithTSB(t *testing.T) {
 	for _, keyType := range helpers.POST_QUANTUM_KEY_TYPES {
 		keyType := keyType
 		t.Run(keyType, func(t *testing.T) {
-			label := "go-client-test-pqc-" + safeTestKeyLabel(keyType)
+			label := testKeyLabel("go-client-test-pqc-" + safeTestKeyLabel(keyType))
 			deleteTestKeyIfExists(t, tsbClient, label)
 			defer deleteTestKeyIfExists(t, tsbClient, label)
 
