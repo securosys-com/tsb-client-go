@@ -222,9 +222,8 @@ func (c *TSBClient) doRequest(req *http.Request, apiKeyName string) ([]byte, int
 
 		c.HTTPClient.Transport = &http.Transport{
 			TLSClientConfig: &tls.Config{
-				RootCAs:            caCertPool,
-				InsecureSkipVerify: true,
-				Certificates:       []tls.Certificate{clientTLSCert},
+				RootCAs:      caCertPool,
+				Certificates: []tls.Certificate{clientTLSCert},
 			},
 		}
 	}

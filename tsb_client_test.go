@@ -6,9 +6,16 @@ package client
 import (
 	"context"
 	"crypto/rand"
+	"crypto/rsa"
+	"crypto/x509"
+	"crypto/x509/pkix"
 	"encoding/json"
+	"encoding/pem"
+	"errors"
 	"fmt"
+	"math/big"
 	"net/http"
+	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -106,6 +113,62 @@ func TestNewTSBClientWithOptionsIgnoresNilOptions(t *testing.T) {
 	if client.HTTPClient == nil {
 		t.Fatal("default HTTP client is nil")
 	}
+}
+
+func TestCertificateAuthRejectsUntrustedServerCertificate(t *testing.T) {
+	certPEM, keyPEM := newSelfSignedClientCertificate(t)
+
+	rogueServer := httptest.NewTLSServer(http.HandlerFunc(func(http.ResponseWriter, *http.Request) {
+		t.Fatal("request reached a server with an untrusted certificate")
+	}))
+	defer rogueServer.Close()
+
+	client, err := NewTSBClient(rogueServer.URL, AuthStruct{
+		AuthType: authTypeCert,
+		CertPEM:  string(certPEM),
+		KeyPEM:   string(keyPEM),
+	})
+	requireNoError(t, err)
+
+	_, _, err = client.CheckConnection(context.Background())
+	if err == nil {
+		t.Fatal("connection with an untrusted server certificate succeeded")
+	}
+	var unknownAuthorityError x509.UnknownAuthorityError
+	if !errors.As(err, &unknownAuthorityError) {
+		t.Fatalf("connection error = %v, want x509.UnknownAuthorityError", err)
+	}
+
+	transport, ok := client.HTTPClient.Transport.(*http.Transport)
+	if !ok {
+		t.Fatalf("HTTP transport type = %T, want *http.Transport", client.HTTPClient.Transport)
+	}
+	if transport.TLSClientConfig.InsecureSkipVerify {
+		t.Fatal("TLS server certificate verification is disabled")
+	}
+}
+
+func newSelfSignedClientCertificate(t *testing.T) ([]byte, []byte) {
+	t.Helper()
+
+	privateKey, err := rsa.GenerateKey(rand.Reader, 2048)
+	requireNoError(t, err)
+	template := &x509.Certificate{
+		SerialNumber: big.NewInt(1),
+		Subject:      pkix.Name{CommonName: "test client"},
+		NotBefore:    time.Now().Add(-time.Minute),
+		NotAfter:     time.Now().Add(time.Hour),
+		KeyUsage:     x509.KeyUsageDigitalSignature | x509.KeyUsageCertSign,
+		ExtKeyUsage:  []x509.ExtKeyUsage{x509.ExtKeyUsageClientAuth},
+		IsCA:         true,
+	}
+	certificate, err := x509.CreateCertificate(rand.Reader, template, template, &privateKey.PublicKey, privateKey)
+	requireNoError(t, err)
+	privateKeyDER, err := x509.MarshalPKCS8PrivateKey(privateKey)
+	requireNoError(t, err)
+
+	return pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: certificate}),
+		pem.EncodeToMemory(&pem.Block{Type: "PRIVATE KEY", Bytes: privateKeyDER})
 }
 
 func TestNewClientUsesSnakeCaseConfigParameters(t *testing.T) {
