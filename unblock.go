@@ -9,8 +9,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
-
-	helpers "github.com/securosys-com/tsb-client-go/helpers"
 )
 
 // Unblock unblocks a key. It uses the synchronous endpoint for a key without a
@@ -39,24 +37,30 @@ func (c *TSBClient) Unblock(ctx context.Context, label string, password string) 
 	return c.unblockSync(ctx, label, password)
 }
 
+type unblockRequest struct {
+	KeyPassword    []string `json:"keyPassword,omitempty"`
+	UnblockKeyName string   `json:"unblockKeyName"`
+}
+
+type asyncUnblockRequest struct {
+	UnblockKeyName    string   `json:"unblockKeyName"`
+	KeyPassword       []string `json:"keyPassword,omitempty"`
+	MetaData          string   `json:"metaData"`
+	MetaDataSignature *string  `json:"metaDataSignature"`
+}
+
 func (c *TSBClient) unblockSync(ctx context.Context, label string, password string) (int, error) {
 	if ctx == nil {
 		ctx = context.Background()
 	}
 
-	charsPasswordJson, _ := json.Marshal(helpers.StringToCharArray(password))
-	passwordString := ""
-	if len(charsPasswordJson) > 2 {
-		passwordString = `"keyPassword": ` + string(charsPasswordJson) + `,`
-
+	jsonStr, err := wrappedRequestBody("unblockRequest", unblockRequest{
+		KeyPassword:    passwordChars(password),
+		UnblockKeyName: label,
+	})
+	if err != nil {
+		return 500, err
 	}
-
-	var jsonStr = []byte(`{
-		"unblockRequest": {
-		` + passwordString + `
-		  "unblockKeyName": "` + label + `"
-		}
-	  }`)
 
 	req, err := http.NewRequestWithContext(ctx, "POST", c.HostURL+"/v1/synchronousUnblock", bytes.NewBuffer(jsonStr))
 	if err != nil {
@@ -76,32 +80,20 @@ func (c *TSBClient) AsyncUnblock(ctx context.Context, label string, password str
 		ctx = context.Background()
 	}
 
-	charsPasswordJson, _ := json.Marshal(helpers.StringToCharArray(password))
 	var additionalMetaDataInfo map[string]string = make(map[string]string)
 	metaDataB64, metaDataSignature, err := c.PrepareMetaData("UnBlock", additionalMetaDataInfo, customMetaData)
 	if err != nil {
 		return "", 500, err
 	}
-	passwordString := ""
-	if len(charsPasswordJson) > 2 {
-		passwordString = `"keyPassword": ` + string(charsPasswordJson) + `,`
-
+	jsonStr, err := c.signedRequestBody("unblockRequest", asyncUnblockRequest{
+		UnblockKeyName:    label,
+		KeyPassword:       passwordChars(password),
+		MetaData:          metaDataB64,
+		MetaDataSignature: metaDataSignature,
+	})
+	if err != nil {
+		return "", 500, err
 	}
-	metaDataSignatureString := "null"
-	if metaDataSignature != nil {
-		metaDataSignatureString = `"` + *metaDataSignature + `"`
-
-	}
-	requestJson := `{
-		"unblockKeyName": "` + label + `",
-		` + passwordString + `
-		"metaData": "` + metaDataB64 + `",
-		"metaDataSignature": ` + metaDataSignatureString + `
-	  }`
-	var jsonStr = []byte(helpers.MinifyJson(`{
-		"unblockRequest": ` + requestJson + `,
-		"requestSignature":` + string(c.GenerateRequestSignature(requestJson)) + `
-	  }`))
 
 	req, err := http.NewRequestWithContext(ctx, "POST", c.HostURL+"/v1/unblock", bytes.NewBuffer(jsonStr))
 	if err != nil {

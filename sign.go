@@ -130,6 +130,34 @@ var BLS_SIGNATURE_ALGORITHM = []SignatureAlgorithm{
 	SignatureAlgorithmBLS,
 }
 
+type signRequest struct {
+	Payload            string   `json:"payload"`
+	PayloadType        string   `json:"payloadType"`
+	KeyPassword        []string `json:"keyPassword,omitempty"`
+	SignKeyName        string   `json:"signKeyName"`
+	SignatureAlgorithm string   `json:"signatureAlgorithm"`
+	SignatureType      string   `json:"signatureType"`
+}
+
+type asyncSignRequest struct {
+	Payload            string   `json:"payload"`
+	PayloadType        string   `json:"payloadType"`
+	KeyPassword        []string `json:"keyPassword,omitempty"`
+	SignKeyName        string   `json:"signKeyName"`
+	SignatureAlgorithm string   `json:"signatureAlgorithm"`
+	SignatureType      string   `json:"signatureType"`
+	MetaData           string   `json:"metaData"`
+	MetaDataSignature  *string  `json:"metaDataSignature"`
+}
+
+type verifySignatureRequest struct {
+	Payload            string   `json:"payload"`
+	MasterKeyPassword  []string `json:"masterKeyPassword,omitempty"`
+	SignKeyName        string   `json:"signKeyName"`
+	SignatureAlgorithm string   `json:"signatureAlgorithm"`
+	Signature          string   `json:"signature"`
+}
+
 // Sign returns the completed signature. It uses the synchronous TSB endpoint
 // for a key without a policy and transparently submits and waits for an
 // asynchronous request when approvals are required.
@@ -164,24 +192,17 @@ func (c *TSBClient) signSync(ctx context.Context, label string, password string,
 	if err != nil {
 		return nil, 500, err
 	}
-	charsPasswordJson, _ := json.Marshal(helpers.StringToCharArray(password))
-	passwordString := ""
-	if len(charsPasswordJson) > 2 {
-		passwordString = `"keyPassword": ` + string(charsPasswordJson) + `,`
-
+	jsonStr, err := wrappedRequestBody("signRequest", signRequest{
+		Payload:            payload,
+		PayloadType:        payloadType,
+		KeyPassword:        passwordChars(password),
+		SignKeyName:        label,
+		SignatureAlgorithm: string(signatureAlgorithm),
+		SignatureType:      string(signatureType),
+	})
+	if err != nil {
+		return nil, 500, err
 	}
-
-	var jsonStr = []byte(`{
-		"signRequest": {
-		"payload": "` + payload + `",
-		"payloadType": "` + payloadType + `",
-		` + passwordString + `
-		"signKeyName": "` + label + `",
-		"signatureAlgorithm": "` + string(signatureAlgorithm) + `",
-  		"signatureType":"` + string(signatureType) + `"
-
-		}
-	  }`)
 
 	req, err := http.NewRequestWithContext(ctx, "POST", c.HostURL+"/v1/synchronousSign", bytes.NewBuffer(jsonStr))
 	if err != nil {
@@ -208,38 +229,25 @@ func (c *TSBClient) AsyncSign(ctx context.Context, label string, password string
 	if err != nil {
 		return "", 500, err
 	}
-	charsPasswordJson, _ := json.Marshal(helpers.StringToCharArray(password))
 	var additionalMetaDataInfo map[string]string = make(map[string]string)
 
 	metaDataB64, metaDataSignature, err := c.PrepareMetaData("Sign", additionalMetaDataInfo, customMetaData)
 	if err != nil {
 		return "", 500, err
 	}
-	passwordString := ""
-	if len(charsPasswordJson) > 2 {
-		passwordString = `"keyPassword": ` + string(charsPasswordJson) + `,`
-
+	jsonStr, err := c.signedRequestBody("signRequest", asyncSignRequest{
+		Payload:            payload,
+		PayloadType:        payloadType,
+		KeyPassword:        passwordChars(password),
+		SignKeyName:        label,
+		SignatureAlgorithm: string(signatureAlgorithm),
+		SignatureType:      string(signatureType),
+		MetaData:           metaDataB64,
+		MetaDataSignature:  metaDataSignature,
+	})
+	if err != nil {
+		return "", 500, err
 	}
-	metaDataSignatureString := "null"
-	if metaDataSignature != nil {
-		metaDataSignatureString = `"` + *metaDataSignature + `"`
-
-	}
-	requestJson := `{
-		"payload": "` + payload + `",
-		"payloadType": "` + payloadType + `",
-		` + passwordString + `
-		"signKeyName": "` + label + `",
-		"signatureAlgorithm": "` + string(signatureAlgorithm) + `",
-		"signatureType": "` + string(signatureType) + `",
-		"metaData": "` + metaDataB64 + `",
-		"metaDataSignature": ` + metaDataSignatureString + `
-
-	  }`
-	var jsonStr = []byte(helpers.MinifyJson(`{
-		"signRequest": ` + requestJson + `,
-		"requestSignature":` + string(c.GenerateRequestSignature(requestJson)) + `
-	  }`))
 	req, err := http.NewRequestWithContext(ctx, "POST", c.HostURL+"/v1/sign", bytes.NewBuffer(jsonStr))
 	if err != nil {
 		return "", 500, err
@@ -274,22 +282,16 @@ func (c *TSBClient) Verify(ctx context.Context, label string, password string, p
 	if ctx == nil {
 		ctx = context.Background()
 	}
-	charsPasswordJson, _ := json.Marshal(helpers.StringToCharArray(password))
-	passwordString := ""
-	if len(charsPasswordJson) > 2 {
-		passwordString = `"masterKeyPassword": ` + string(charsPasswordJson) + `,`
-
+	jsonStr, err := wrappedRequestBody("verifySignatureRequest", verifySignatureRequest{
+		Payload:            payload,
+		MasterKeyPassword:  passwordChars(password),
+		SignKeyName:        label,
+		SignatureAlgorithm: string(signatureAlgorithm),
+		Signature:          signature,
+	})
+	if err != nil {
+		return false, 500, err
 	}
-
-	var jsonStr = []byte(`{
-		"verifySignatureRequest": {
-		  "payload": "` + payload + `",
-		  ` + passwordString + `
-		  "signKeyName": "` + label + `",
-		  "signatureAlgorithm": "` + string(signatureAlgorithm) + `",
-		  "signature": "` + signature + `"
-		}
-	  }`)
 
 	req, err := http.NewRequestWithContext(ctx, "POST", c.HostURL+"/v1/verify", bytes.NewBuffer(jsonStr))
 	if err != nil {

@@ -98,12 +98,31 @@ func (c *TSBClient) Wrap(wrapKeyName string, wrapKeyPassword string, keyToBeWrap
 
 }
 
+type unwrapKeyRequest struct {
+	WrappedKey        string          `json:"wrappedKey"`
+	Label             string          `json:"label"`
+	UnwrapKeyName     string          `json:"unwrapKeyName"`
+	UnwrapKeyPassword []string        `json:"unwrapKeyPassword,omitempty"`
+	WrapMethod        string          `json:"wrapMethod"`
+	Attributes        map[string]bool `json:"attributes"`
+}
+
+type asyncUnwrapKeyRequest struct {
+	WrappedKey        string          `json:"wrappedKey"`
+	Label             string          `json:"label"`
+	UnwrapKeyName     string          `json:"unwrapKeyName"`
+	UnwrapKeyPassword []string        `json:"unwrapKeyPassword,omitempty"`
+	WrapMethod        string          `json:"wrapMethod"`
+	Attributes        map[string]bool `json:"attributes"`
+	MetaData          string          `json:"metaData"`
+	MetaDataSignature *string         `json:"metaDataSignature"`
+}
+
 // AsyncUnwrap submits an asynchronous unwrap request to TSB.
 func (c *TSBClient) AsyncUnwrap(ctx context.Context, wrappedKey string, label string, attributes map[string]bool, unwrapKeyName string, unwrapKeyPassword string, wrapMethod WrapMethod, policy *helpers.Policy, customMetaData map[string]string) (string, int, error) {
 	if ctx == nil {
 		ctx = context.Background()
 	}
-	charsPasswordJson, _ := json.Marshal(helpers.StringToCharArray(unwrapKeyPassword))
 	var additionalMetaDataInfo map[string]string = make(map[string]string)
 	additionalMetaDataInfo["wrapped key"] = wrappedKey
 	additionalMetaDataInfo["new key label"] = label
@@ -114,30 +133,19 @@ func (c *TSBClient) AsyncUnwrap(ctx context.Context, wrappedKey string, label st
 	if err != nil {
 		return "", 500, err
 	}
-	passwordString := ""
-	if len(charsPasswordJson) > 2 {
-		passwordString = `"unwrapKeyPassword": ` + string(charsPasswordJson) + `,`
-
+	jsonStr, err := c.signedRequestBody("unwrapKeyRequest", asyncUnwrapKeyRequest{
+		WrappedKey:        wrappedKey,
+		Label:             label,
+		UnwrapKeyName:     unwrapKeyName,
+		UnwrapKeyPassword: passwordChars(unwrapKeyPassword),
+		WrapMethod:        string(wrapMethod),
+		Attributes:        attributes,
+		MetaData:          metaDataB64,
+		MetaDataSignature: metaDataSignature,
+	})
+	if err != nil {
+		return "", 500, err
 	}
-	metaDataSignatureString := "null"
-	if metaDataSignature != nil {
-		metaDataSignatureString = `"` + *metaDataSignature + `"`
-
-	}
-	requestJson := `{
-		"wrappedKey": "` + wrappedKey + `",
-		"label": "` + label + `",
-		"unwrapKeyName": "` + unwrapKeyName + `",
-		` + passwordString + `
-		"wrapMethod": "` + string(wrapMethod) + `",
-		"attributes": ` + helpers.PrepareAttributes(attributes) + `,
-		"metaData": "` + metaDataB64 + `",
-		"metaDataSignature": ` + metaDataSignatureString + `
-		}`
-	var jsonStr = []byte(helpers.MinifyJson(`{
-			"unwrapKeyRequest": ` + requestJson + `,
-			"requestSignature":` + string(c.GenerateRequestSignature(requestJson)) + `
-		}`))
 	req, err := http.NewRequestWithContext(ctx, "POST", c.HostURL+"/v1/unwrap", bytes.NewBuffer(jsonStr))
 	if err != nil {
 		return "", 500, err
@@ -184,22 +192,17 @@ func (c *TSBClient) unwrapSync(ctx context.Context, wrappedKey string, label str
 	if ctx == nil {
 		ctx = context.Background()
 	}
-	charsPasswordJson, _ := json.Marshal(helpers.StringToCharArray(unwrapKeyPassword))
-	passwordString := ""
-	if len(charsPasswordJson) > 2 {
-		passwordString = `"unwrapKeyPassword": ` + string(charsPasswordJson) + `,`
-
+	jsonStr, err := wrappedRequestBody("unwrapKeyRequest", unwrapKeyRequest{
+		WrappedKey:        wrappedKey,
+		Label:             label,
+		UnwrapKeyName:     unwrapKeyName,
+		UnwrapKeyPassword: passwordChars(unwrapKeyPassword),
+		WrapMethod:        string(wrapMethod),
+		Attributes:        attributes,
+	})
+	if err != nil {
+		return 500, err
 	}
-
-	var jsonStr = []byte(`{
-		"unwrapKeyRequest": {
-		"wrappedKey": "` + wrappedKey + `",
-		"label": "` + label + `",
-		"unwrapKeyName": "` + unwrapKeyName + `",
-		` + passwordString + `
-		"wrapMethod": "` + string(wrapMethod) + `",
-		"attributes": ` + helpers.PrepareAttributes(attributes) + `
-		}}`)
 	req, err := http.NewRequestWithContext(ctx, "POST", c.HostURL+"/v1/synchronousUnwrap", bytes.NewBuffer(jsonStr))
 	if err != nil {
 		return 500, err

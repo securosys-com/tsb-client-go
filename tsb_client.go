@@ -321,18 +321,12 @@ func (c *TSBClient) GenerateRequestSignature(requestData string) []byte {
 		panic(err)
 	}
 
-	signature, err := c.SignData(dst.Bytes())
+	signature, err := c.signRequest(dst.Bytes())
 	if err != nil {
 		// TODO: Propagate error
 		panic(err)
 	}
-
-	return []byte(`{
-		"signature": "` + *signature + `",
-		"digestAlgorithm": "SHA-256",
-		"publicKey": "` + *c.Auth.ApplicationKeyPair.PublicKey + `"
-		}
-	`)
+	return signature
 }
 
 func (c *TSBClient) SignData(dataToSign []byte) (*string, error) {

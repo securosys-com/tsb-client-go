@@ -9,8 +9,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
-
-	"github.com/securosys-com/tsb-client-go/helpers"
 )
 
 // Block blocks a key. It uses the synchronous endpoint for a key without a
@@ -39,24 +37,30 @@ func (c *TSBClient) Block(ctx context.Context, label string, password string) (i
 	return c.blockSync(ctx, label, password)
 }
 
+type blockRequest struct {
+	KeyPassword  []string `json:"keyPassword,omitempty"`
+	BlockKeyName string   `json:"blockKeyName"`
+}
+
+type asyncBlockRequest struct {
+	BlockKeyName      string   `json:"blockKeyName"`
+	KeyPassword       []string `json:"keyPassword,omitempty"`
+	MetaData          string   `json:"metaData"`
+	MetaDataSignature *string  `json:"metaDataSignature"`
+}
+
 func (c *TSBClient) blockSync(ctx context.Context, label string, password string) (int, error) {
 	if ctx == nil {
 		ctx = context.Background()
 	}
 
-	charsPasswordJson, _ := json.Marshal(helpers.StringToCharArray(password))
-	passwordString := ""
-	if len(charsPasswordJson) > 2 {
-		passwordString = `"keyPassword": ` + string(charsPasswordJson) + `,`
-
+	jsonStr, err := wrappedRequestBody("blockRequest", blockRequest{
+		KeyPassword:  passwordChars(password),
+		BlockKeyName: label,
+	})
+	if err != nil {
+		return 500, err
 	}
-
-	var jsonStr = []byte(`{
-		"blockRequest": {
-		  ` + passwordString + `
-		  "blockKeyName": "` + label + `"
-		}
-	  }`)
 
 	req, err := http.NewRequestWithContext(ctx, "POST", c.HostURL+"/v1/synchronousBlock", bytes.NewBuffer(jsonStr))
 	if err != nil {
@@ -76,33 +80,20 @@ func (c *TSBClient) AsyncBlock(ctx context.Context, label string, password strin
 		ctx = context.Background()
 	}
 
-	charsPasswordJson, _ := json.Marshal(helpers.StringToCharArray(password))
 	var additionalMetaDataInfo map[string]string = make(map[string]string)
 	metaDataB64, metaDataSignature, err := c.PrepareMetaData("Block", additionalMetaDataInfo, customMetaData)
 	if err != nil {
 		return "", 500, err
 	}
-	passwordString := ""
-	if len(charsPasswordJson) > 2 {
-		passwordString = `"keyPassword": ` + string(charsPasswordJson) + `,`
-
+	jsonStr, err := c.signedRequestBody("blockRequest", asyncBlockRequest{
+		BlockKeyName:      label,
+		KeyPassword:       passwordChars(password),
+		MetaData:          metaDataB64,
+		MetaDataSignature: metaDataSignature,
+	})
+	if err != nil {
+		return "", 500, err
 	}
-	metaDataSignatureString := "null"
-	if metaDataSignature != nil {
-		metaDataSignatureString = `"` + *metaDataSignature + `"`
-
-	}
-	requestJson := `{
-		"blockKeyName": "` + label + `",
-		` + passwordString + `	  
-		"metaData": "` + metaDataB64 + `",
-		"metaDataSignature": ` + metaDataSignatureString + `
-	  }`
-	var jsonStr = []byte(helpers.MinifyJson(`{
-		"blockRequest": ` + requestJson + `,
-		"requestSignature":` + string(c.GenerateRequestSignature(requestJson)) + `
-
-	  }`))
 
 	req, err := http.NewRequestWithContext(ctx, "POST", c.HostURL+"/v1/block", bytes.NewBuffer(jsonStr))
 	if err != nil {

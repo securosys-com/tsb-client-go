@@ -6,42 +6,92 @@ package client
 import (
 	"bytes"
 	"encoding/json"
-	"fmt"
 	"net/http"
-	"strings"
 
 	helpers "github.com/securosys-com/tsb-client-go/helpers"
 )
 
+type certificateRequest struct {
+	SignKeyName                   string                        `json:"signKeyName"`
+	KeyPassword                   []string                      `json:"keyPassword,omitempty"`
+	SignatureAlgorithm            string                        `json:"signatureAlgorithm"`
+	Validity                      int                           `json:"validity"`
+	StandardCertificateAttributes helpers.CertificateAttributes `json:"standardCertificateAttributes"`
+	KeyUsage                      []string                      `json:"keyUsage"`
+	ExtendedKeyUsage              []string                      `json:"extendedKeyUsage"`
+	MetaData                      *string                       `json:"metaData,omitempty"`
+	MetaDataSignature             *signedMetaDataSignature      `json:"metaDataSignature,omitempty"`
+}
+
+type selfSignedCertificateRequest struct {
+	SignKeyName          string                   `json:"signKeyName"`
+	KeyPassword          []string                 `json:"keyPassword,omitempty"`
+	SignatureAlgorithm   string                   `json:"signatureAlgorithm"`
+	Validity             int                      `json:"validity"`
+	CommonName           string                   `json:"commonName"`
+	KeyUsage             []string                 `json:"keyUsage"`
+	ExtendedKeyUsage     []string                 `json:"extendedKeyUsage"`
+	MetaData             *string                  `json:"metaData,omitempty"`
+	MetaDataSignature    *signedMetaDataSignature `json:"metaDataSignature,omitempty"`
+	CertificateAuthority bool                     `json:"certificateAuthority"`
+}
+
+type signCertificateRequest struct {
+	SignKeyName               string                   `json:"signKeyName"`
+	KeyPassword               []string                 `json:"keyPassword,omitempty"`
+	SignatureAlgorithm        string                   `json:"signatureAlgorithm"`
+	CommonName                string                   `json:"commonName"`
+	CertificateSigningRequest string                   `json:"certificateSigningRequest"`
+	KeyUsage                  []string                 `json:"keyUsage"`
+	ExtendedKeyUsage          []string                 `json:"extendedKeyUsage"`
+	MetaData                  *string                  `json:"metaData,omitempty"`
+	MetaDataSignature         *signedMetaDataSignature `json:"metaDataSignature,omitempty"`
+	CertificateAuthority      bool                     `json:"certificateAuthority"`
+}
+
+type importCertificateRequest struct {
+	Label       string `json:"label"`
+	Certificate string `json:"certificate"`
+}
+
+// signedMetaDataSignature wraps the metadata signature of an asynchronous
+// request. A nil signature is encoded as JSON null; the whole field is
+// omitted for synchronous requests.
+type signedMetaDataSignature struct {
+	value *string
+}
+
+func (s signedMetaDataSignature) MarshalJSON() ([]byte, error) {
+	return marshalJSON(s.value)
+}
+
+// prepareCertificateMetaData returns the metadata fields for an asynchronous
+// certificate request.
+func (c *TSBClient) prepareCertificateMetaData(requestType string, userMetaData map[string]string) (*string, *signedMetaDataSignature, error) {
+	additionalMetaDataInfo := make(map[string]string, len(userMetaData))
+	for index, value := range userMetaData {
+		additionalMetaDataInfo[index] = value
+	}
+	metaDataB64, metaDataSignature, err := c.PrepareMetaData(requestType, additionalMetaDataInfo, map[string]string{})
+	if err != nil {
+		return nil, nil, err
+	}
+	return &metaDataB64, &signedMetaDataSignature{value: metaDataSignature}, nil
+}
+
 // Function thats create a certificate request to TSB
 func (c *TSBClient) CreateCertificate(signKeyName string, keyPassword string, signatureAlgorithm string, validity int, certAttributes helpers.CertificateAttributes, keyUsage []string, extendedKeyUsage []string) (*helpers.GenerateCertificateRequestResponse, int, error) {
-
-	var jsonStr []byte
-
-	if keyPassword == "" {
-		certAttributesJson, _ := json.Marshal(certAttributes)
-		jsonStr = []byte(`{
-		  "signKeyName": "` + signKeyName + `",
-		  "signatureAlgorithm": "` + signatureAlgorithm + `",
-		  "validity": ` + fmt.Sprint(validity) + `,
-		  "standardCertificateAttributes":` + string(certAttributesJson) + `,
-		  "keyUsage": ["` + strings.Join(keyUsage[:], ",") + `"],
-		  "extendedKeyUsage": ["` + strings.Join(extendedKeyUsage[:], ",") + `"]
-	  }`)
-
-	} else {
-		keyPasswordJson, _ := json.Marshal(helpers.StringToCharArray(keyPassword))
-		certAttributesJson, _ := json.Marshal(certAttributes)
-
-		jsonStr = []byte(`{
-		  "signKeyName": "` + signKeyName + `",
-		  "keyPassword": ` + string(keyPasswordJson) + `,
-		  "signatureAlgorithm": "` + signatureAlgorithm + `",
-		  "validity": ` + fmt.Sprint(validity) + `,
-		  "standardCertificateAttributes":` + string(certAttributesJson) + `,
-		  "keyUsage": ["` + strings.Join(keyUsage[:], ",") + `"],
-		  "extendedKeyUsage": ["` + strings.Join(extendedKeyUsage[:], ",") + `"]
-	  }`)
+	jsonStr, err := marshalJSON(certificateRequest{
+		SignKeyName:                   signKeyName,
+		KeyPassword:                   passwordChars(keyPassword),
+		SignatureAlgorithm:            signatureAlgorithm,
+		Validity:                      validity,
+		StandardCertificateAttributes: certAttributes,
+		KeyUsage:                      nonNilStrings(keyUsage),
+		ExtendedKeyUsage:              nonNilStrings(extendedKeyUsage),
+	})
+	if err != nil {
+		return nil, 500, err
 	}
 
 	req, err := http.NewRequest("POST", c.HostURL+"/v1/certificate/synchronous/request", bytes.NewBuffer(jsonStr))
@@ -53,43 +103,26 @@ func (c *TSBClient) CreateCertificate(signKeyName string, keyPassword string, si
 		return nil, code, errRes
 	}
 	var response helpers.GenerateCertificateRequestResponse
-	// response.KeyID = signKeyName
-	// response.CertificateRequest = string(body)
 	json.Unmarshal(body, &response)
 	return &response, code, nil
 
 }
 
 func (c *TSBClient) CreateSelfSignedCertificate(signKeyName string, keyPassword string, signatureAlgorithm string, validity int, commonName string, keyUsage []string, extendedKeyUsage []string, certificateAuthority bool) (*helpers.GenerateSelfSignedCertificateResponse, int, error) {
-
-	var jsonStr []byte
-	keyUsageJson, _ := json.Marshal(keyUsage)
-	extendedKeyUsageJson, _ := json.Marshal(extendedKeyUsage)
-	if keyPassword == "" {
-		jsonStr = []byte(`{
-		  "signKeyName": "` + signKeyName + `",
-		  "signatureAlgorithm": "` + signatureAlgorithm + `",
-		  "validity": ` + fmt.Sprint(validity) + `,
-		  "commonName": "` + commonName + `",
-		  "keyUsage": ` + string(keyUsageJson) + `,
-		  "extendedKeyUsage": ` + string(extendedKeyUsageJson) + `,
-		  "certificateAuthority": ` + fmt.Sprint(certificateAuthority) + `
-	  }`)
-
-	} else {
-		keyPasswordJson, _ := json.Marshal(helpers.StringToCharArray(keyPassword))
-
-		jsonStr = []byte(`{
-		  "signKeyName": "` + signKeyName + `",
-		  "keyPassword": ` + string(keyPasswordJson) + `,
-		  "signatureAlgorithm": "` + signatureAlgorithm + `",
-		  "validity": ` + fmt.Sprint(validity) + `,
-		  "commonName": "` + commonName + `",
-		  "keyUsage": ` + string(keyUsageJson) + `,
-		  "extendedKeyUsage": ` + string(extendedKeyUsageJson) + `,
-		  "certificateAuthority": ` + fmt.Sprint(certificateAuthority) + `
-	  }`)
+	jsonStr, err := marshalJSON(selfSignedCertificateRequest{
+		SignKeyName:          signKeyName,
+		KeyPassword:          passwordChars(keyPassword),
+		SignatureAlgorithm:   signatureAlgorithm,
+		Validity:             validity,
+		CommonName:           commonName,
+		KeyUsage:             nonNilStrings(keyUsage),
+		ExtendedKeyUsage:     nonNilStrings(extendedKeyUsage),
+		CertificateAuthority: certificateAuthority,
+	})
+	if err != nil {
+		return nil, 500, err
 	}
+
 	req, err := http.NewRequest("POST", c.HostURL+"/v1/certificate/synchronous/selfsign", bytes.NewBuffer(jsonStr))
 	if err != nil {
 		return nil, 500, err
@@ -99,42 +132,24 @@ func (c *TSBClient) CreateSelfSignedCertificate(signKeyName string, keyPassword 
 		return nil, code, errRes
 	}
 	var response helpers.GenerateSelfSignedCertificateResponse
-	// response.KeyID = signKeyName
-	// response.CertificateRequest = string(body)
 	json.Unmarshal(body, &response)
 	return &response, code, nil
 
 }
 
 func (c *TSBClient) SignCertificate(signKeyName string, keyPassword string, signatureAlgorithm string, certificateSigningRequest string, commonName string, keyUsage []string, extendedKeyUsage []string, certificateAuthority bool) (*helpers.GenerateSelfSignedCertificateResponse, int, error) {
-
-	var jsonStr []byte
-	if keyPassword == "" {
-
-		jsonStr = []byte(`{
-		  "signKeyName": "` + signKeyName + `",
-		  "signatureAlgorithm": "` + signatureAlgorithm + `",
-		  "commonName": "` + commonName + `",
-		  "certificateSigningRequest": "` + certificateSigningRequest + `",
-		  "keyUsage": ["` + strings.Join(keyUsage[:], ",") + `"],
-		  "extendedKeyUsage": ["` + strings.Join(extendedKeyUsage[:], ",") + `"],
-		  "certificateAuthority": ` + fmt.Sprint(certificateAuthority) + `
-
-	  }`)
-
-	} else {
-		keyPasswordJson, _ := json.Marshal(helpers.StringToCharArray(keyPassword))
-
-		jsonStr = []byte(`{
-		  "signKeyName": "` + signKeyName + `",
-		  "keyPassword": ` + string(keyPasswordJson) + `,
-		  "signatureAlgorithm": "` + signatureAlgorithm + `",
-		  "commonName": "` + commonName + `",
-		  "certificateSigningRequest": "` + certificateSigningRequest + `",
-		  "keyUsage": ["` + strings.Join(keyUsage[:], ",") + `"],
-		  "extendedKeyUsage": ["` + strings.Join(extendedKeyUsage[:], ",") + `"],
-		  "certificateAuthority": ` + fmt.Sprint(certificateAuthority) + `
-	  }`)
+	jsonStr, err := marshalJSON(signCertificateRequest{
+		SignKeyName:               signKeyName,
+		KeyPassword:               passwordChars(keyPassword),
+		SignatureAlgorithm:        signatureAlgorithm,
+		CommonName:                commonName,
+		CertificateSigningRequest: certificateSigningRequest,
+		KeyUsage:                  nonNilStrings(keyUsage),
+		ExtendedKeyUsage:          nonNilStrings(extendedKeyUsage),
+		CertificateAuthority:      certificateAuthority,
+	})
+	if err != nil {
+		return nil, 500, err
 	}
 
 	req, err := http.NewRequest("POST", c.HostURL+"/v1/certificate/synchronous/sign", bytes.NewBuffer(jsonStr))
@@ -146,8 +161,6 @@ func (c *TSBClient) SignCertificate(signKeyName string, keyPassword string, sign
 		return nil, code, errRes
 	}
 	var response helpers.GenerateSelfSignedCertificateResponse
-	// response.KeyID = signKeyName
-	// response.CertificateRequest = string(body)
 	json.Unmarshal(body, &response)
 	return &response, code, nil
 
@@ -155,54 +168,23 @@ func (c *TSBClient) SignCertificate(signKeyName string, keyPassword string, sign
 
 // Function thats create a certificate request to TSB
 func (c *TSBClient) AsyncCreateCertificate(signKeyName string, keyPassword string, signatureAlgorithm string, validity int, certAttributes helpers.CertificateAttributes, keyUsage []string, extendedKeyUsage []string, userMetaData map[string]string) (string, int, error) {
-
-	var jsonStr []byte
-	var additionalMetaDataInfo map[string]string = make(map[string]string)
-
-	for index, value := range userMetaData {
-		additionalMetaDataInfo[index] = value
+	metaData, metaDataSignature, err := c.prepareCertificateMetaData("CertificateSigningRequest", userMetaData)
+	if err != nil {
+		return "", 500, err
 	}
-
-	metaDataB64, metaDataSignature, _ := c.PrepareMetaData("CertificateSigningRequest", additionalMetaDataInfo, map[string]string{})
-	metaDataSignatureString := "null"
-	if metaDataSignature != nil {
-		metaDataSignatureString = `"` + *metaDataSignature + `"`
-
-	}
-
-	if keyPassword == "" {
-		certAttributesJson, _ := json.Marshal(certAttributes)
-		requestJson := `{
-			"signKeyName": "` + signKeyName + `",
-			"signatureAlgorithm": "` + signatureAlgorithm + `",
-			"validity": ` + fmt.Sprint(validity) + `,
-			"standardCertificateAttributes":` + string(certAttributesJson) + `,
-			"keyUsage": ["` + strings.Join(keyUsage[:], ",") + `"],
-			"extendedKeyUsage": ["` + strings.Join(extendedKeyUsage[:], ",") + `"],
-			"metaData": "` + metaDataB64 + `",
-			"metaDataSignature": ` + metaDataSignatureString + `
-		}`
-		jsonStr = []byte(helpers.MinifyJson(`{
-			"csrSignRequest": ` + requestJson + ` ,
-	  "requestSignature":` + string(c.GenerateRequestSignature(requestJson)) + `}`))
-
-	} else {
-		keyPasswordJson, _ := json.Marshal(helpers.StringToCharArray(keyPassword))
-		certAttributesJson, _ := json.Marshal(certAttributes)
-		requestJson := `{
-			"signKeyName": "` + signKeyName + `",
-			"keyPassword": ` + string(keyPasswordJson) + `,
-			"signatureAlgorithm": "` + signatureAlgorithm + `",
-			"validity": ` + fmt.Sprint(validity) + `,
-			"standardCertificateAttributes":` + string(certAttributesJson) + `,
-			"keyUsage": ["` + strings.Join(keyUsage[:], ",") + `"],
-			"extendedKeyUsage": ["` + strings.Join(extendedKeyUsage[:], ",") + `"],
-			  "metaData": "` + metaDataB64 + `",
-			"metaDataSignature": ` + metaDataSignatureString + `
-		}`
-		jsonStr = []byte(helpers.MinifyJson(`{ 
-			"csrSignRequest": ` + requestJson + `,
-	  "requestSignature":` + string(c.GenerateRequestSignature(requestJson)) + `}`))
+	jsonStr, err := c.signedRequestBody("csrSignRequest", certificateRequest{
+		SignKeyName:                   signKeyName,
+		KeyPassword:                   passwordChars(keyPassword),
+		SignatureAlgorithm:            signatureAlgorithm,
+		Validity:                      validity,
+		StandardCertificateAttributes: certAttributes,
+		KeyUsage:                      nonNilStrings(keyUsage),
+		ExtendedKeyUsage:              nonNilStrings(extendedKeyUsage),
+		MetaData:                      metaData,
+		MetaDataSignature:             metaDataSignature,
+	})
+	if err != nil {
+		return "", 500, err
 	}
 
 	req, err := http.NewRequest("POST", c.HostURL+"/v1/certificate/request", bytes.NewBuffer(jsonStr))
@@ -223,54 +205,24 @@ func (c *TSBClient) AsyncCreateCertificate(signKeyName string, keyPassword strin
 }
 
 func (c *TSBClient) AsyncSelfSignedCertificate(signKeyName string, keyPassword string, signatureAlgorithm string, validity int, commonName string, keyUsage []string, extendedKeyUsage []string, certificateAuthority bool, userMetaData map[string]string) (string, int, error) {
-
-	var jsonStr []byte
-	var additionalMetaDataInfo map[string]string = make(map[string]string)
-
-	for index, value := range userMetaData {
-		additionalMetaDataInfo[index] = value
+	metaData, metaDataSignature, err := c.prepareCertificateMetaData("SelfSignCertificate", userMetaData)
+	if err != nil {
+		return "", 500, err
 	}
-
-	metaDataB64, metaDataSignature, _ := c.PrepareMetaData("SelfSignCertificate", additionalMetaDataInfo, map[string]string{})
-	metaDataSignatureString := "null"
-	if metaDataSignature != nil {
-		metaDataSignatureString = `"` + *metaDataSignature + `"`
-
-	}
-
-	if keyPassword == "" {
-		requestJson := `{
-			"signKeyName": "` + signKeyName + `",
-			"signatureAlgorithm": "` + signatureAlgorithm + `",
-			"validity": ` + fmt.Sprint(validity) + `,
-			"commonName": "` + commonName + `",
-			"keyUsage": ["` + strings.Join(keyUsage[:], ",") + `"],
-			"extendedKeyUsage": ["` + strings.Join(extendedKeyUsage[:], ", ") + `"],
-			"metaData": "` + metaDataB64 + `",
-			"metaDataSignature": ` + metaDataSignatureString + `,
-			"certificateAuthority": ` + fmt.Sprint(certificateAuthority) + `
-		}`
-		jsonStr = []byte(helpers.MinifyJson(`{
-			"selfSignCertificateRequest":` + requestJson + `,
-	  "requestSignature":` + string(c.GenerateRequestSignature(requestJson)) + `}`))
-
-	} else {
-		keyPasswordJson, _ := json.Marshal(helpers.StringToCharArray(keyPassword))
-		requestJson := `{
-			"signKeyName": "` + signKeyName + `",
-			"keyPassword": ` + string(keyPasswordJson) + `,
-			"signatureAlgorithm": "` + signatureAlgorithm + `",
-			"validity": ` + fmt.Sprint(validity) + `,
-			"commonName": "` + commonName + `",
-			"keyUsage": ["` + strings.Join(keyUsage[:], ",") + `"],
-			"extendedKeyUsage": ["` + strings.Join(extendedKeyUsage[:], ", ") + `"],
-			"metaData": "` + metaDataB64 + `",
-			"metaDataSignature": ` + metaDataSignatureString + `,
-			"certificateAuthority": ` + fmt.Sprint(certificateAuthority) + `
-		}`
-		jsonStr = []byte(helpers.MinifyJson(`{
-			"selfSignCertificateRequest":` + requestJson + `,
-	  "requestSignature":` + string(c.GenerateRequestSignature(requestJson)) + `}`))
+	jsonStr, err := c.signedRequestBody("selfSignCertificateRequest", selfSignedCertificateRequest{
+		SignKeyName:          signKeyName,
+		KeyPassword:          passwordChars(keyPassword),
+		SignatureAlgorithm:   signatureAlgorithm,
+		Validity:             validity,
+		CommonName:           commonName,
+		KeyUsage:             nonNilStrings(keyUsage),
+		ExtendedKeyUsage:     nonNilStrings(extendedKeyUsage),
+		MetaData:             metaData,
+		MetaDataSignature:    metaDataSignature,
+		CertificateAuthority: certificateAuthority,
+	})
+	if err != nil {
+		return "", 500, err
 	}
 
 	req, err := http.NewRequest("POST", c.HostURL+"/v1/certificate/selfsign", bytes.NewBuffer(jsonStr))
@@ -291,57 +243,24 @@ func (c *TSBClient) AsyncSelfSignedCertificate(signKeyName string, keyPassword s
 }
 
 func (c *TSBClient) AsyncSignCertificate(signKeyName string, keyPassword string, signatureAlgorithm string, certificateSigningRequest string, commonName string, keyUsage []string, extendedKeyUsage []string, certificateAuthority bool, userMetaData map[string]string) (string, int, error) {
-
-	var jsonStr []byte
-
-	var additionalMetaDataInfo map[string]string = make(map[string]string)
-
-	for index, value := range userMetaData {
-		additionalMetaDataInfo[index] = value
+	metaData, metaDataSignature, err := c.prepareCertificateMetaData("Certificate", userMetaData)
+	if err != nil {
+		return "", 500, err
 	}
-
-	metaDataB64, metaDataSignature, _ := c.PrepareMetaData("Certificate", additionalMetaDataInfo, map[string]string{})
-	metaDataSignatureString := "null"
-	if metaDataSignature != nil {
-		metaDataSignatureString = `"` + *metaDataSignature + `"`
-
-	}
-
-	if keyPassword == "" {
-		requestJson := `{
-			"signKeyName": "` + signKeyName + `",
-			"signatureAlgorithm": "` + signatureAlgorithm + `",
-			"commonName": "` + commonName + `",
-			"certificateSigningRequest": "` + certificateSigningRequest + `",
-			"keyUsage": ["` + strings.Join(keyUsage[:], ",") + `"],
-			"extendedKeyUsage": ["` + strings.Join(extendedKeyUsage[:], ",") + `"],
-			"metaData": "` + metaDataB64 + `",
-			"metaDataSignature": ` + metaDataSignatureString + `,
-			"certificateAuthority": ` + fmt.Sprint(certificateAuthority) + `
-  
-		}`
-		jsonStr = []byte(helpers.MinifyJson(`{
-			"signCertificateRequest": ` + requestJson + `,
-	  		"requestSignature":` + string(c.GenerateRequestSignature(requestJson)) + `
-	  }`))
-
-	} else {
-		keyPasswordJson, _ := json.Marshal(helpers.StringToCharArray(keyPassword))
-		requestJson := `{
-			"signKeyName": "` + signKeyName + `",
-			"keyPassword": ` + string(keyPasswordJson) + `,
-			"signatureAlgorithm": "` + signatureAlgorithm + `",
-			"commonName": "` + commonName + `",
-			"certificateSigningRequest": "` + certificateSigningRequest + `",
-			"keyUsage": ["` + strings.Join(keyUsage[:], ",") + `"],
-			"extendedKeyUsage": ["` + strings.Join(extendedKeyUsage[:], ",") + `"],
-			"metaData": "` + metaDataB64 + `",
-			"metaDataSignature": ` + metaDataSignatureString + `,
-			"certificateAuthority": ` + fmt.Sprint(certificateAuthority) + `
-		}`
-		jsonStr = []byte(helpers.MinifyJson(`{
-			"signCertificateRequest": ` + requestJson + `,
-	  "requestSignature":` + string(c.GenerateRequestSignature(requestJson)) + `}`))
+	jsonStr, err := c.signedRequestBody("signCertificateRequest", signCertificateRequest{
+		SignKeyName:               signKeyName,
+		KeyPassword:               passwordChars(keyPassword),
+		SignatureAlgorithm:        signatureAlgorithm,
+		CommonName:                commonName,
+		CertificateSigningRequest: certificateSigningRequest,
+		KeyUsage:                  nonNilStrings(keyUsage),
+		ExtendedKeyUsage:          nonNilStrings(extendedKeyUsage),
+		MetaData:                  metaData,
+		MetaDataSignature:         metaDataSignature,
+		CertificateAuthority:      certificateAuthority,
+	})
+	if err != nil {
+		return "", 500, err
 	}
 
 	req, err := http.NewRequest("POST", c.HostURL+"/v1/certificate/sign", bytes.NewBuffer(jsonStr))
@@ -363,11 +282,13 @@ func (c *TSBClient) AsyncSignCertificate(signKeyName string, keyPassword string,
 
 // Function thats import a certificate request from TSB
 func (c *TSBClient) ImportCertificate(label string, certificate string) (*helpers.RequestResponseImportCertificate, int, error) {
-
-	var jsonStr = []byte(`{
-		  "label": "` + label + `",
-		  "certificate": "` + certificate + `",
-	  }`)
+	jsonStr, err := marshalJSON(importCertificateRequest{
+		Label:       label,
+		Certificate: certificate,
+	})
+	if err != nil {
+		return nil, 500, err
+	}
 
 	req, err := http.NewRequest("POST", c.HostURL+"/v1/certificate/import/plain", bytes.NewBuffer(jsonStr))
 	if err != nil {

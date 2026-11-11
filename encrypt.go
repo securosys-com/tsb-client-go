@@ -10,7 +10,6 @@ import (
 	"fmt"
 	"net/http"
 	"slices"
-	"strconv"
 
 	helpers "github.com/securosys-com/tsb-client-go/helpers"
 )
@@ -79,57 +78,71 @@ var TDEA_CIPHER_ALGORITHM = []CipherAlgorithm{
 	CipherAlgorithmTDEACBCNoPadding,
 }
 
+type encryptRequest struct {
+	Payload                      string   `json:"payload"`
+	KeyPassword                  []string `json:"keyPassword,omitempty"`
+	EncryptKeyName               string   `json:"encryptKeyName"`
+	CipherAlgorithm              string   `json:"cipherAlgorithm"`
+	TagLength                    *int     `json:"tagLength,omitempty"`
+	AdditionalAuthenticationData *string  `json:"additionalAuthenticationData"`
+}
+
+type decryptRequest struct {
+	EncryptedPayload             string   `json:"encryptedPayload"`
+	KeyPassword                  []string `json:"keyPassword,omitempty"`
+	DecryptKeyName               string   `json:"decryptKeyName"`
+	CipherAlgorithm              string   `json:"cipherAlgorithm"`
+	InitializationVector         *string  `json:"initializationVector"`
+	TagLength                    *int     `json:"tagLength,omitempty"`
+	AdditionalAuthenticationData *string  `json:"additionalAuthenticationData"`
+}
+
+type asyncDecryptRequest struct {
+	EncryptedPayload             string   `json:"encryptedPayload"`
+	KeyPassword                  []string `json:"keyPassword,omitempty"`
+	DecryptKeyName               string   `json:"decryptKeyName"`
+	MetaData                     string   `json:"metaData"`
+	MetaDataSignature            *string  `json:"metaDataSignature"`
+	CipherAlgorithm              string   `json:"cipherAlgorithm"`
+	InitializationVector         *string  `json:"initializationVector"`
+	TagLength                    *int     `json:"tagLength,omitempty"`
+	AdditionalAuthenticationData *string  `json:"additionalAuthenticationData"`
+}
+
+// gcmTagLength returns the tag length to send, which is only set for AES-GCM
+// when a tag length was requested (-1 means "not set").
+func gcmTagLength(cipherAlgorithm CipherAlgorithm, tagLength int) *int {
+	if tagLength == -1 || cipherAlgorithm != CipherAlgorithmAESGCM {
+		return nil
+	}
+	return &tagLength
+}
+
 // Function thats sends asynchronous decrypt request to TSB
 func (c *TSBClient) AsyncDecrypt(ctx context.Context, label string, password string, cipertext string, vector string, cipherAlgorithm CipherAlgorithm, tagLength int, additionalAuthenticationData string, customMetaData map[string]string) (string, int, error) {
 	if ctx == nil {
 		ctx = context.Background()
 	}
-	charsPasswordJson, _ := json.Marshal(helpers.StringToCharArray(password))
-
 	var additionalMetaDataInfo map[string]string = make(map[string]string)
 
 	metaDataB64, metaDataSignature, err := c.PrepareMetaData("Decrypt", additionalMetaDataInfo, customMetaData)
 	if err != nil {
 		return "", 500, err
 	}
-	vectorString := `"` + vector + `"`
-	if vector == "" {
-		vectorString = "null"
+	jsonStr, err := c.signedRequestBody("decryptRequest", asyncDecryptRequest{
+		EncryptedPayload:             cipertext,
+		KeyPassword:                  passwordChars(password),
+		DecryptKeyName:               label,
+		MetaData:                     metaDataB64,
+		MetaDataSignature:            metaDataSignature,
+		CipherAlgorithm:              string(cipherAlgorithm),
+		InitializationVector:         nullIfEmpty(vector),
+		TagLength:                    gcmTagLength(cipherAlgorithm, tagLength),
+		AdditionalAuthenticationData: nullIfEmpty(additionalAuthenticationData),
+	})
+	if err != nil {
+		return "", 500, err
 	}
-	additionalAuthenticationDataString := `"` + additionalAuthenticationData + `"`
-	if additionalAuthenticationData == "" {
-		additionalAuthenticationDataString = "null"
-	}
-	tagLengthString := ""
-	if tagLength != -1 && cipherAlgorithm == CipherAlgorithmAESGCM {
-		tagLengthString = `"tagLength":` + strconv.Itoa(tagLength) + `,`
-	}
-	passwordString := ""
-	if len(charsPasswordJson) > 2 {
-		passwordString = `"keyPassword": ` + string(charsPasswordJson) + `,`
-
-	}
-	metaDataSignatureString := "null"
-	if metaDataSignature != nil {
-		metaDataSignatureString = `"` + *metaDataSignature + `"`
-
-	}
-	requestJson := `{
-		"encryptedPayload": "` + cipertext + `",
-		` + passwordString + `
-		"decryptKeyName": "` + label + `",
-		"metaData": "` + metaDataB64 + `",
-		"metaDataSignature": ` + metaDataSignatureString + `,
-		"cipherAlgorithm": "` + string(cipherAlgorithm) + `",
-		"initializationVector": ` + vectorString + `,
-		` + tagLengthString + `
-		"additionalAuthenticationData":` + additionalAuthenticationDataString + `
-	  }`
-
-	var jsonStr = []byte(helpers.MinifyJson(`{
-		"decryptRequest": ` + helpers.MinifyJson(requestJson) + `,
-		"requestSignature":` + string(c.GenerateRequestSignature(requestJson)) + `
-	  }`))
 
 	req, err := http.NewRequestWithContext(ctx, "POST", c.HostURL+"/v1/decrypt", bytes.NewBuffer(jsonStr))
 	if err != nil {
@@ -181,36 +194,18 @@ func (c *TSBClient) decryptSync(ctx context.Context, label string, password stri
 	if ctx == nil {
 		ctx = context.Background()
 	}
-	charsPasswordJson, _ := json.Marshal(helpers.StringToCharArray(password))
-	vectorString := `"` + vector + `"`
-	if vector == "" {
-		vectorString = "null"
+	jsonStr, err := wrappedRequestBody("decryptRequest", decryptRequest{
+		EncryptedPayload:             cipertext,
+		KeyPassword:                  passwordChars(password),
+		DecryptKeyName:               label,
+		CipherAlgorithm:              string(cipherAlgorithm),
+		InitializationVector:         nullIfEmpty(vector),
+		TagLength:                    gcmTagLength(cipherAlgorithm, tagLength),
+		AdditionalAuthenticationData: nullIfEmpty(additionalAuthenticationData),
+	})
+	if err != nil {
+		return nil, 500, err
 	}
-	additionalAuthenticationDataString := `"` + additionalAuthenticationData + `"`
-	if additionalAuthenticationData == "" {
-		additionalAuthenticationDataString = "null"
-	}
-	tagLengthString := ""
-	if tagLength != -1 && cipherAlgorithm == CipherAlgorithmAESGCM {
-		tagLengthString = `"tagLength":` + strconv.Itoa(tagLength) + `,`
-	}
-	passwordString := ""
-	if len(charsPasswordJson) > 2 {
-		passwordString = `"keyPassword": ` + string(charsPasswordJson) + `,`
-
-	}
-
-	var jsonStr = []byte(`{
-		"decryptRequest": {
-		  "encryptedPayload": "` + cipertext + `",
-		  ` + passwordString + `	
-		  "decryptKeyName": "` + label + `",
-		  "cipherAlgorithm": "` + string(cipherAlgorithm) + `",
-		  "initializationVector": ` + vectorString + `,
-		  ` + tagLengthString + `
-		  "additionalAuthenticationData":` + additionalAuthenticationDataString + `
-		}
-	  }`)
 	req, err := http.NewRequestWithContext(ctx, "POST", c.HostURL+"/v1/synchronousDecrypt", bytes.NewBuffer(jsonStr))
 	if err != nil {
 		return nil, 500, err
@@ -233,31 +228,17 @@ func (c *TSBClient) Encrypt(ctx context.Context, label string, password string, 
 	if ctx == nil {
 		ctx = context.Background()
 	}
-	charsPasswordJson, _ := json.Marshal(helpers.StringToCharArray(password))
-	additionalAuthenticationDataString := `"` + additionalAuthenticationData + `"`
-	if additionalAuthenticationData == "" {
-		additionalAuthenticationDataString = "null"
+	jsonStr, err := wrappedRequestBody("encryptRequest", encryptRequest{
+		Payload:                      payload,
+		KeyPassword:                  passwordChars(password),
+		EncryptKeyName:               label,
+		CipherAlgorithm:              string(cipherAlgorithm),
+		TagLength:                    gcmTagLength(cipherAlgorithm, tagLength),
+		AdditionalAuthenticationData: nullIfEmpty(additionalAuthenticationData),
+	})
+	if err != nil {
+		return nil, 500, err
 	}
-	tagLengthString := ""
-	if tagLength != -1 && cipherAlgorithm == CipherAlgorithmAESGCM {
-		tagLengthString = `"tagLength":` + strconv.Itoa(tagLength) + `,`
-	}
-	passwordString := ""
-	if len(charsPasswordJson) > 2 {
-		passwordString = `"keyPassword": ` + string(charsPasswordJson) + `,`
-
-	}
-
-	var jsonStr = []byte(`{
-		"encryptRequest": {
-		  "payload": "` + payload + `",
-		  ` + passwordString + `
-		  "encryptKeyName": "` + label + `",
-		  "cipherAlgorithm": "` + string(cipherAlgorithm) + `",
-		  ` + tagLengthString + `
-		  "additionalAuthenticationData":` + additionalAuthenticationDataString + `
-		}
-	  }`)
 	req, err := http.NewRequestWithContext(ctx, "POST", c.HostURL+"/v1/encrypt", bytes.NewBuffer(jsonStr))
 	if err != nil {
 		return nil, 500, err

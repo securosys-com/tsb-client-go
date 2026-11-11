@@ -13,28 +13,59 @@ import (
 	helpers "github.com/securosys-com/tsb-client-go/helpers"
 )
 
+type changePasswordRequest struct {
+	Password    []string `json:"password,omitempty"`
+	NewPassword []string `json:"newPassword,omitempty"`
+	Label       string   `json:"label"`
+}
+
+type createKeyRequest struct {
+	Label      string          `json:"label"`
+	Algorithm  string          `json:"algorithm"`
+	Password   []string        `json:"password,omitempty"`
+	KeySize    float64         `json:"keySize,omitempty"`
+	CurveOid   string          `json:"curveOid,omitempty"`
+	Attributes map[string]bool `json:"attributes"`
+	Policy     *helpers.Policy `json:"policy"`
+}
+
+type deleteKeyRequest struct {
+	Label    string   `json:"label"`
+	Password []string `json:"password,omitempty"`
+}
+
+type importKeyRequest struct {
+	Label       string          `json:"label"`
+	Algorithm   string          `json:"algorithm"`
+	PrivateKey  string          `json:"privateKey,omitempty"`
+	PublicKey   string          `json:"publicKey,omitempty"`
+	SecretKey   string          `json:"secretKey,omitempty"`
+	Certificate string          `json:"certificate,omitempty"`
+	Attributes  map[string]bool `json:"attributes"`
+	Policy      *helpers.Policy `json:"policy"`
+}
+
+// labelPasswordRequest is used by endpoints that only need a key label and
+// an optional key password.
+type labelPasswordRequest struct {
+	Password []string `json:"password,omitempty"`
+	Label    string   `json:"label"`
+}
+
 // Function thats sends update key password request to TSB
 func (c *TSBClient) UpdateKeyPassword(ctx context.Context, label string, password string, newPassword string) (string, error) {
 	if ctx == nil {
 		ctx = context.Background()
 	}
 
-	charsPasswordJson, _ := json.Marshal(helpers.StringToCharArray(password))
-	charsNewPasswordJson, _ := json.Marshal(helpers.StringToCharArray(newPassword))
-	passwordString := ""
-	if len(charsPasswordJson) > 2 {
-		passwordString = `"password": ` + string(charsPasswordJson) + `,`
-
+	jsonStr, err := marshalJSON(changePasswordRequest{
+		Password:    passwordChars(password),
+		NewPassword: passwordChars(newPassword),
+		Label:       label,
+	})
+	if err != nil {
+		return "", err
 	}
-	newPasswordString := ""
-	if len(charsNewPasswordJson) > 2 {
-		newPasswordString = `"newPassword": ` + string(charsNewPasswordJson) + `,`
-
-	}
-	var jsonStr = []byte(`{
-			` + passwordString + newPasswordString + `
-			"label": "` + label + `"
-		}`)
 
 	req, err := http.NewRequestWithContext(ctx, "POST", c.HostURL+"/v1/key/changePassword", bytes.NewBuffer(jsonStr))
 	if err != nil {
@@ -54,36 +85,21 @@ func (c *TSBClient) CreateOrUpdateKey(ctx context.Context, label string, passwor
 		ctx = context.Background()
 	}
 
-	charsPasswordJson, _ := json.Marshal(helpers.StringToCharArray(password))
-	policyJson, _ := json.Marshal(&policy)
-	policyString := string(`,"policy":` + string(policyJson))
 	if attributes["extractable"] {
-		policyString = string(`,"policy":null`)
+		policy = nil
 	}
-	var keySizeAttr string
-	if keySize == 0 {
-		keySizeAttr = ""
-	} else {
-		keySizeAttr = `"keySize": ` + fmt.Sprintf("%g", keySize) + `,`
+	jsonStr, err := marshalJSON(createKeyRequest{
+		Label:      label,
+		Algorithm:  keytype,
+		Password:   passwordChars(password),
+		KeySize:    keySize,
+		CurveOid:   curveOid,
+		Attributes: attributes,
+		Policy:     policy,
+	})
+	if err != nil {
+		return "", err
 	}
-	var curveOidString string
-	if curveOid == "" {
-		curveOidString = ""
-	} else {
-		curveOidString = `"curveOid": "` + curveOid + `",`
-	}
-	passwordString := ""
-	if len(charsPasswordJson) > 2 {
-		passwordString = `"password": ` + string(charsPasswordJson) + `,`
-
-	}
-	var jsonStr = []byte(`{
-	"label": "` + label + `",
-    "algorithm": "` + keytype + `",	
-    ` + passwordString + `
-	` + keySizeAttr + `
-	` + curveOidString + `
-	"attributes": ` + helpers.PrepareAttributes(attributes) + policyString + `}`)
 
 	req, err := http.NewRequestWithContext(ctx, "POST", c.HostURL+"/v1/key", bytes.NewBuffer(jsonStr))
 	if err != nil {
@@ -109,16 +125,14 @@ func (c *TSBClient) RemoveKey(ctx context.Context, keyLabel string, password ...
 		ctx = context.Background()
 	}
 
-	passwordString := ""
+	request := deleteKeyRequest{Label: keyLabel}
 	if len(password) > 0 {
-		charsPasswordJson, _ := json.Marshal(helpers.StringToCharArray(password[0]))
-		if len(charsPasswordJson) > 2 {
-			passwordString = `,"password": ` + string(charsPasswordJson)
-		}
+		request.Password = passwordChars(password[0])
 	}
-	var jsonStr = []byte(`{
-		"label": "` + keyLabel + `"` + passwordString + `
-	}`)
+	jsonStr, err := marshalJSON(request)
+	if err != nil {
+		return err
+	}
 
 	req, err := http.NewRequestWithContext(ctx, "POST", c.HostURL+"/v1/key/deleteKey", bytes.NewBuffer(jsonStr))
 	if err != nil {
@@ -138,43 +152,23 @@ func (c *TSBClient) ImportKey(ctx context.Context, label string, privateKey stri
 		ctx = context.Background()
 	}
 
-	policyJson, _ := json.Marshal(policy)
-	policyString := string(`,"policy":` + string(policyJson))
+	request := importKeyRequest{
+		Label:       label,
+		Algorithm:   keytype,
+		PrivateKey:  privateKey,
+		PublicKey:   publicKey,
+		SecretKey:   secretKey,
+		Certificate: certificate,
+		Attributes:  attributes,
+		Policy:      &policy,
+	}
 	if attributes["extractable"] {
-		policyString = string(`,"policy":null`)
+		request.Policy = nil
 	}
-	var privateKeyString string
-	if privateKey == "" {
-		privateKeyString = ""
-	} else {
-		privateKeyString = `"privateKey": "` + privateKey + `",`
+	jsonStr, err := marshalJSON(request)
+	if err != nil {
+		return nil, err
 	}
-	var publicKeyString string
-	if publicKey == "" {
-		publicKeyString = ""
-	} else {
-		publicKeyString = `"publicKey": "` + publicKey + `",`
-	}
-	var secretKeyString string
-	if secretKey == "" {
-		secretKeyString = ""
-	} else {
-		secretKeyString = `"secretKey": "` + secretKey + `",`
-	}
-	var certificateString string
-	if certificate == "" {
-		certificateString = ""
-	} else {
-		certificateString = `"certificate": "` + certificate + `",`
-	}
-	var jsonStr = []byte(`{
-	"label": "` + label + `",
-    "algorithm": "` + keytype + `",	
-	` + privateKeyString + `
-	` + publicKeyString + `
-	` + secretKeyString + `
-	` + certificateString + `
-	"attributes": ` + helpers.PrepareAttributes(attributes) + policyString + `}`)
 
 	req, err := http.NewRequestWithContext(ctx, "POST", c.HostURL+"/v1/key/import/plain", bytes.NewBuffer(jsonStr))
 	if err != nil {
@@ -196,18 +190,13 @@ func (c *TSBClient) ExportKey(ctx context.Context, label string, password string
 		ctx = context.Background()
 	}
 
-	charsPasswordJson, _ := json.Marshal(helpers.StringToCharArray(password))
-	passwordString := ""
-	if len(charsPasswordJson) > 2 {
-		passwordString = `"password": ` + string(charsPasswordJson) + `,`
-
+	jsonStr, err := marshalJSON(labelPasswordRequest{
+		Password: passwordChars(password),
+		Label:    label,
+	})
+	if err != nil {
+		return nil, err
 	}
-
-	var jsonStr = []byte(`{
-		` + passwordString + `
-		  "label": "` + label + `"
-		  
-	  }`)
 
 	req, err := http.NewRequestWithContext(ctx, "POST", c.HostURL+"/v1/key/export/plain", bytes.NewBuffer(jsonStr))
 	if err != nil {
@@ -231,19 +220,16 @@ func (c *TSBClient) GetKey(ctx context.Context, label string, password string) (
 		ctx = context.Background()
 	}
 
-	charsPasswordJson, _ := json.Marshal(helpers.StringToCharArray(password))
-	passwordString := ""
-	if len(charsPasswordJson) > 2 {
-		passwordString = `"password": ` + string(charsPasswordJson) + `,`
-
+	var key helpers.KeyAttributes
+	jsonStr, err := marshalJSON(labelPasswordRequest{
+		Password: passwordChars(password),
+		Label:    label,
+	})
+	if err != nil {
+		return key, err
 	}
-	var jsonStr = []byte(`{
-			` + passwordString + `
-			"label":"` + label + `"		
-		}`)
 
 	req, err := http.NewRequestWithContext(ctx, "POST", c.HostURL+"/v1/key/attributes", bytes.NewBuffer(jsonStr))
-	var key helpers.KeyAttributes
 	if err != nil {
 		return key, err
 	}

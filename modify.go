@@ -38,27 +38,33 @@ func (c *TSBClient) Modify(ctx context.Context, label string, password string, p
 	return c.modifySync(ctx, label, password, policy)
 }
 
+type modifyRequest struct {
+	KeyPassword   []string       `json:"keyPassword,omitempty"`
+	ModifyKeyName string         `json:"modifyKeyName"`
+	Policy        helpers.Policy `json:"policy"`
+}
+
+type asyncModifyRequest struct {
+	ModifyKeyName     string         `json:"modifyKeyName"`
+	KeyPassword       []string       `json:"keyPassword,omitempty"`
+	MetaData          string         `json:"metaData"`
+	MetaDataSignature *string        `json:"metaDataSignature"`
+	Policy            helpers.Policy `json:"policy"`
+}
+
 func (c *TSBClient) modifySync(ctx context.Context, label string, password string, policy helpers.Policy) (int, error) {
 	if ctx == nil {
 		ctx = context.Background()
 	}
 
-	policyJson, _ := json.Marshal(policy)
-	policyString := string(`,"policy":` + string(policyJson))
-
-	charsPasswordJson, _ := json.Marshal(helpers.StringToCharArray(password))
-	passwordString := ""
-	if len(charsPasswordJson) > 2 {
-		passwordString = `"keyPassword": ` + string(charsPasswordJson) + `,`
-
+	jsonStr, err := wrappedRequestBody("modifyRequest", modifyRequest{
+		KeyPassword:   passwordChars(password),
+		ModifyKeyName: label,
+		Policy:        policy,
+	})
+	if err != nil {
+		return 500, err
 	}
-
-	var jsonStr = []byte(`{
-		"modifyRequest":{
-			` + passwordString + `
-			"modifyKeyName": "` + label + `"
-			` + policyString + `}
-		}`)
 
 	req, err := http.NewRequestWithContext(ctx, "POST", c.HostURL+"/v1/synchronousModify", bytes.NewBuffer(jsonStr))
 	if err != nil {
@@ -83,29 +89,16 @@ func (c *TSBClient) AsyncModify(ctx context.Context, label string, password stri
 	if err != nil {
 		return "", 500, err
 	}
-	policyJson, _ := json.Marshal(policy)
-	policyString := string(`,"policy":` + string(policyJson))
-
-	charsPasswordJson, _ := json.Marshal(helpers.StringToCharArray(password))
-	passwordString := ""
-	if len(charsPasswordJson) > 2 {
-		passwordString = `"keyPassword": ` + string(charsPasswordJson) + `,`
-
+	jsonStr, err := c.signedRequestBody("modifyRequest", asyncModifyRequest{
+		ModifyKeyName:     label,
+		KeyPassword:       passwordChars(password),
+		MetaData:          metaDataB64,
+		MetaDataSignature: metaDataSignature,
+		Policy:            policy,
+	})
+	if err != nil {
+		return "", 500, err
 	}
-	metaDataSignatureString := "null"
-	if metaDataSignature != nil {
-		metaDataSignatureString = `"` + *metaDataSignature + `"`
-
-	}
-	requestJson := `{"modifyKeyName": "` + label + `",
-		` + passwordString + `
-		"metaData": "` + metaDataB64 + `",
-		"metaDataSignature": ` + metaDataSignatureString + `
-		  ` + policyString + `}`
-	var jsonStr = []byte(helpers.MinifyJson(`{
-		"modifyRequest":` + requestJson + `,
-		"requestSignature":` + string(c.GenerateRequestSignature(requestJson)) + `
-		}`))
 	req, err := http.NewRequestWithContext(ctx, "POST", c.HostURL+"/v1/modify", bytes.NewBuffer(jsonStr))
 	if err != nil {
 		return "", 500, err
