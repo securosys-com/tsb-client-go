@@ -9,7 +9,10 @@ import (
 	"crypto/sha256"
 	"crypto/sha512"
 	"encoding/base64"
+	"encoding/json"
+	"fmt"
 	"net/http"
+	"net/http/httptest"
 	"strings"
 	"testing"
 
@@ -309,4 +312,215 @@ func TestNormalizeSignatureType(t *testing.T) {
 			}
 		})
 	}
+}
+
+const (
+	testPostQuantumKeyManagementToken = "pqc-key-management-token"
+	testPostQuantumKeyOperationToken  = "pqc-key-operation-token"
+	testPostQuantumSignKeyLabel       = "go-client-test-pqc-offline-sign"
+	testPostQuantumSignature          = "cG9zdC1xdWFudHVtLXNpZ25hdHVyZQ=="
+)
+
+type postQuantumSignCase struct {
+	keyType            string
+	signatureAlgorithm SignatureAlgorithm
+}
+
+func postQuantumOfflineSignCases() []postQuantumSignCase {
+	return []postQuantumSignCase{
+		{keyType: "ML-DSA-44", signatureAlgorithm: SignatureAlgorithm("ML_DSA")},
+		{keyType: "ML-DSA-65", signatureAlgorithm: SignatureAlgorithm("ML_DSA")},
+		{keyType: "ML-DSA-87", signatureAlgorithm: SignatureAlgorithm("ML_DSA")},
+		{keyType: "SLH-DSA-SHA2-128f", signatureAlgorithm: SignatureAlgorithm("SLH_DSA")},
+		{keyType: "SLH-DSA-SHAKE-256s", signatureAlgorithm: SignatureAlgorithm("SLH_DSA")},
+	}
+}
+
+func TestSignPostQuantumSynchronousEncodesRequest(t *testing.T) {
+	for _, tc := range postQuantumOfflineSignCases() {
+		t.Run(tc.keyType, func(t *testing.T) {
+			server := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+				switch request.URL.Path {
+				case "/v1/key/attributes":
+					if request.Header.Get("X-API-KEY") != testPostQuantumKeyManagementToken {
+						t.Fatalf("X-API-KEY = %q, want %q", request.Header.Get("X-API-KEY"), testPostQuantumKeyManagementToken)
+					}
+					writePostQuantumKeyAttributes(writer, testPostQuantumSignKeyLabel, tc.keyType)
+				case "/v1/synchronousSign":
+					if request.Method != http.MethodPost {
+						t.Fatalf("method = %s, want POST", request.Method)
+					}
+					if request.Header.Get("X-API-KEY") != testPostQuantumKeyOperationToken {
+						t.Fatalf("X-API-KEY = %q, want %q", request.Header.Get("X-API-KEY"), testPostQuantumKeyOperationToken)
+					}
+
+					var body struct {
+						SignRequest struct {
+							Payload            string `json:"payload"`
+							PayloadType        string `json:"payloadType"`
+							SignKeyName        string `json:"signKeyName"`
+							SignatureAlgorithm string `json:"signatureAlgorithm"`
+							SignatureType      string `json:"signatureType"`
+						} `json:"signRequest"`
+					}
+					if err := json.NewDecoder(request.Body).Decode(&body); err != nil {
+						t.Fatalf("decode sign request: %v", err)
+					}
+					if body.SignRequest.Payload != testRSASignPayload {
+						t.Fatalf("payload = %q, want %q", body.SignRequest.Payload, testRSASignPayload)
+					}
+					if body.SignRequest.PayloadType != testRSASignPayloadType {
+						t.Fatalf("payloadType = %q, want %q", body.SignRequest.PayloadType, testRSASignPayloadType)
+					}
+					if body.SignRequest.SignKeyName != testPostQuantumSignKeyLabel {
+						t.Fatalf("signKeyName = %q, want %q", body.SignRequest.SignKeyName, testPostQuantumSignKeyLabel)
+					}
+					if body.SignRequest.SignatureAlgorithm != string(tc.signatureAlgorithm) {
+						t.Fatalf("signatureAlgorithm = %q, want %q", body.SignRequest.SignatureAlgorithm, tc.signatureAlgorithm)
+					}
+					if body.SignRequest.SignatureType != string(SignatureTypeDER) {
+						t.Fatalf("signatureType = %q, want %q", body.SignRequest.SignatureType, SignatureTypeDER)
+					}
+
+					_, _ = fmt.Fprintf(writer, `{"signature":%q,"keyVersion":"1"}`, testPostQuantumSignature)
+				default:
+					t.Fatalf("unexpected path %q", request.URL.Path)
+				}
+			}))
+			defer server.Close()
+
+			tsbClient := newPostQuantumSignTestClient(t, server.URL)
+			response, code, err := tsbClient.Sign(
+				context.Background(),
+				testPostQuantumSignKeyLabel,
+				"",
+				testRSASignPayload,
+				testRSASignPayloadType,
+				tc.signatureAlgorithm,
+				SignatureTypeDER,
+			)
+			requireNoError(t, err)
+			if code != http.StatusOK {
+				t.Fatalf("sign status code = %d, want %d", code, http.StatusOK)
+			}
+			if response.Signature != testPostQuantumSignature {
+				t.Fatalf("signature = %q, want %q", response.Signature, testPostQuantumSignature)
+			}
+		})
+	}
+}
+
+func TestVerifyPostQuantumSignature(t *testing.T) {
+	tests := []struct {
+		name  string
+		valid bool
+	}{
+		{name: "accepted", valid: true},
+		{name: "rejected", valid: false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			server := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+				if request.URL.Path != "/v1/verify" {
+					t.Fatalf("path = %q, want /v1/verify", request.URL.Path)
+				}
+				if request.Method != http.MethodPost {
+					t.Fatalf("method = %s, want POST", request.Method)
+				}
+				if request.Header.Get("X-API-KEY") != testPostQuantumKeyOperationToken {
+					t.Fatalf("X-API-KEY = %q, want %q", request.Header.Get("X-API-KEY"), testPostQuantumKeyOperationToken)
+				}
+
+				var body struct {
+					VerifySignatureRequest struct {
+						Payload            string `json:"payload"`
+						SignKeyName        string `json:"signKeyName"`
+						SignatureAlgorithm string `json:"signatureAlgorithm"`
+						Signature          string `json:"signature"`
+					} `json:"verifySignatureRequest"`
+				}
+				if err := json.NewDecoder(request.Body).Decode(&body); err != nil {
+					t.Fatalf("decode verify request: %v", err)
+				}
+				if body.VerifySignatureRequest.Payload != testRSASignPayload {
+					t.Fatalf("payload = %q, want %q", body.VerifySignatureRequest.Payload, testRSASignPayload)
+				}
+				if body.VerifySignatureRequest.SignKeyName != testPostQuantumSignKeyLabel {
+					t.Fatalf("signKeyName = %q, want %q", body.VerifySignatureRequest.SignKeyName, testPostQuantumSignKeyLabel)
+				}
+				if body.VerifySignatureRequest.SignatureAlgorithm != "ML_DSA" {
+					t.Fatalf("signatureAlgorithm = %q, want ML_DSA", body.VerifySignatureRequest.SignatureAlgorithm)
+				}
+				if body.VerifySignatureRequest.Signature != testPostQuantumSignature {
+					t.Fatalf("signature = %q, want %q", body.VerifySignatureRequest.Signature, testPostQuantumSignature)
+				}
+
+				_, _ = fmt.Fprintf(writer, `{"signatureValid":%t}`, tt.valid)
+			}))
+			defer server.Close()
+
+			tsbClient := newPostQuantumSignTestClient(t, server.URL)
+			valid, code, err := tsbClient.Verify(
+				context.Background(),
+				testPostQuantumSignKeyLabel,
+				"",
+				testRSASignPayload,
+				SignatureAlgorithm("ML_DSA"),
+				testPostQuantumSignature,
+			)
+			requireNoError(t, err)
+			if code != http.StatusOK {
+				t.Fatalf("verify status code = %d, want %d", code, http.StatusOK)
+			}
+			if valid != tt.valid {
+				t.Fatalf("signatureValid = %t, want %t", valid, tt.valid)
+			}
+		})
+	}
+}
+
+func TestVerifyReportsResponseWithoutSignatureValid(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, _ *http.Request) {
+		_, _ = writer.Write([]byte(`{"result":"missing signatureValid"}`))
+	}))
+	defer server.Close()
+
+	tsbClient := newPostQuantumSignTestClient(t, server.URL)
+	valid, code, err := tsbClient.Verify(
+		context.Background(),
+		testPostQuantumSignKeyLabel,
+		"",
+		testRSASignPayload,
+		SignatureAlgorithm("SLH_DSA"),
+		testPostQuantumSignature,
+	)
+	if err == nil {
+		t.Fatal("expected error for response without signatureValid")
+	}
+	if valid {
+		t.Fatal("signatureValid = true, want false")
+	}
+	if code != http.StatusInternalServerError {
+		t.Fatalf("code = %d, want %d", code, http.StatusInternalServerError)
+	}
+}
+
+func writePostQuantumKeyAttributes(writer http.ResponseWriter, label string, keyType string) {
+	writer.Header().Set("Content-Type", "application/json")
+	_, _ = fmt.Fprintf(writer, `{"json":{"algorithm":%q,"algorithmOid":"","label":%q,"attributes":{"sign":true,"verify":true},"policy":null},"xml":"","xmlSignature":"","attestationKeyName":""}`, keyType, label)
+}
+
+func newPostQuantumSignTestClient(t *testing.T, hostURL string) *TSBClient {
+	t.Helper()
+	tsbClient, err := NewTSBClient(hostURL, AuthStruct{
+		AuthType: authTypeNone,
+		AppName:  testAppName,
+		ApiKeys: ApiKeyTypes{
+			KeyManagementToken: []string{testPostQuantumKeyManagementToken},
+			KeyOperationToken:  []string{testPostQuantumKeyOperationToken},
+		},
+	})
+	requireNoError(t, err)
+	return tsbClient
 }
