@@ -1,5 +1,5 @@
 GO_MIN_TOOLCHAIN ?= go1.27.0
-GO_PATCH_TOOLCHAIN ?= go1.27.3
+GO_PATCH_TOOLCHAIN ?= go1.27.4
 
 .PHONY: check lint test govulncheck staticcheck nil-safety
 

@@ -22,8 +22,8 @@ govulncheck:
     - if: $CI_PIPELINE_SOURCE == "merge_request_event"
     - if: $CI_COMMIT_BRANCH && $CI_COMMIT_BRANCH != "main"
   script:
-    # Scan with a Go toolchain containing the crypto/x509 security fix.
-    - GOTOOLCHAIN=go1.27.3 go run golang.org/x/vuln/cmd/govulncheck@v1.8.0 ./...
+    # Scan with a Go toolchain containing the net/http (GO-2026-6859) security fix.
+    - GOTOOLCHAIN=go1.27.4 go run golang.org/x/vuln/cmd/govulncheck@v1.8.0 ./...
 
 # https://staticcheck.dev/
 staticcheck:
